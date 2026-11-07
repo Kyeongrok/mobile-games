@@ -20,3 +20,14 @@ YoutubeMp3 안드로이드 앱에서 분리한 게임 모음입니다. Android 1
 
 JDK 17이 필요합니다(GraalVM의 jlink로는 빌드가 실패하니 Corretto/Temurin 등을 쓰세요).
 릴리즈 서명은 환경변수 `ANDROID_KEYSTORE_FILE`, `ANDROID_KEYSTORE_PASS`(, `ANDROID_KEY_ALIAS`, 기본 `games`)로 넘깁니다.
+
+## 릴리즈
+
+`v1.0.0`처럼 `v`로 시작하는 태그를 올리면 GitHub Actions가 APK를 빌드해 [Releases](../../releases)에 `Games-v1.0.0.apk`로 올립니다.
+`main`에 올리면 빌드·테스트만 하고 APK는 실행 결과의 아티팩트로 남깁니다.
+
+```sh
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+폰에서 지우지 않고 업데이트하려면 저장소 Secrets에 `ANDROID_KEYSTORE_B64`(키스토어 base64), `ANDROID_KEYSTORE_PASS`, (선택) `ANDROID_KEY_ALIAS`를 넣어 늘 같은 키로 서명해야 합니다.

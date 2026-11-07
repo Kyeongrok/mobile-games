@@ -1,0 +1,84 @@
+name: Release
+
+# main에 올리면 APK가 빌드되는지만 확인하고(아티팩트로 남긴다),
+# v로 시작하는 태그(v1.0.0)를 올리면 그 버전으로 빌드해 GitHub 릴리즈에 APK를 붙인다.
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      # 태그 v1.2.3 → versionName 1.2.3, versionCode 10203. 태그가 아니면 0.0.<실행 번호>로 빌드한다.
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            IFS=. read -r major minor patch <<< "$version"
+            code=$((major * 10000 + minor * 100 + ${patch:-0}))
+          else
+            version="0.0.${GITHUB_RUN_NUMBER}"
+            code=1
+          fi
+          echo "name=$version" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+      # 서명: 저장소 비밀값 ANDROID_KEYSTORE_B64(키 파일 base64) · ANDROID_KEYSTORE_PASS (· ANDROID_KEY_ALIAS, 기본 games)가
+      # 있으면 늘 같은 키로 서명한다(그래야 폰에서 지우지 않고 업데이트된다). 없으면 디버그 키로 서명한다.
+      - name: Build and test
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/games-release.keystore"
+            echo "$KEYSTORE_B64" | base64 -d > "$ANDROID_KEYSTORE_FILE"
+            echo "고정 키로 서명합니다"
+          else
+            echo "::warning::서명 비밀값이 없어 디버그 키로 서명합니다 — 폰에서 업데이트하려면 지우고 다시 깔아야 합니다"
+          fi
+          [ -n "$ANDROID_KEY_ALIAS" ] || unset ANDROID_KEY_ALIAS
+          chmod +x gradlew
+          ./gradlew :app:testDebugUnitTest :app:assembleRelease --console=plain \
+            -PappVersionName="${{ steps.version.outputs.name }}" \
+            -PappVersionCode="${{ steps.version.outputs.code }}"
+          cp app/build/outputs/apk/release/app-release.apk "Games-v${{ steps.version.outputs.name }}.apk"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Games-v${{ steps.version.outputs.name }}
+          path: Games-v*.apk
+
+      - name: Create or update GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" Games-v*.apk --clobber
+          else
+            gh release create "$tag" Games-v*.apk --title "$tag" --generate-notes
+          fi
