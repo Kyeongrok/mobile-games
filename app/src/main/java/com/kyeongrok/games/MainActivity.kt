@@ -3,6 +3,7 @@ package com.kyeongrok.games
 import android.app.Activity
 import android.graphics.Color
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -40,6 +41,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -160,7 +162,37 @@ private fun MainScreen(viewModel: GameViewModel) {
     LaunchedEffect(screen) { AppSettings.saveLastScreen(context, screen.name) }
     BackHandler(screen != Screen.Home) { screen = Screen.Home }
 
-    if (settingsOpen) SettingsDialog(viewModel, onDismiss = { settingsOpen = false })
+    val update by viewModel.update.collectAsStateWithLifecycle()
+    val updateProgress by viewModel.updateProgress.collectAsStateWithLifecycle()
+    var updateAsked by rememberSaveable { mutableStateOf(false) }
+    val checkUpdate = {
+        viewModel.checkForUpdate { result ->
+            when (result) {
+                // 예전에 '나중에'를 눌렀어도 직접 확인했으면 설치 안내를 다시 띄운다.
+                is UpdateCheck.Newer -> updateAsked = false
+                is UpdateCheck.UpToDate ->
+                    Toast.makeText(context, "최신 버전입니다 (v${BuildConfig.VERSION_NAME})", Toast.LENGTH_SHORT).show()
+                is UpdateCheck.Failed -> Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    if (settingsOpen) SettingsDialog(viewModel, onCheckUpdate = checkUpdate, onDismiss = { settingsOpen = false })
+
+    update?.takeIf { !updateAsked }?.let { release ->
+        AlertDialog(
+            onDismissRequest = { updateAsked = true },
+            title = { Text("새 버전") },
+            text = { Text("새 버전 ${release.version}이 나왔습니다. 받아서 설치할까요?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    updateAsked = true
+                    viewModel.installUpdate()
+                }) { Text("설치") }
+            },
+            dismissButton = { TextButton(onClick = { updateAsked = true }) { Text("나중에") } },
+        )
+    }
 
     val home = { screen = Screen.Home }
     Scaffold(
@@ -185,6 +217,14 @@ private fun MainScreen(viewModel: GameViewModel) {
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
+            // 받는 중이면 어느 화면에서든 진행 막대를, 홈에서는 '나중에'를 눌렀어도 설치 버튼을 보여 준다.
+            updateProgress?.let { progress ->
+                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+            } ?: update?.takeIf { screen == Screen.Home }?.let { release ->
+                TextButton(onClick = viewModel::installUpdate, modifier = Modifier.fillMaxWidth()) {
+                    Text("새 버전 ${release.version} 설치")
+                }
+            }
             when (screen) {
                 Screen.Home -> HomeScreen(
                     onOpen = { screen = it },
@@ -249,11 +289,12 @@ private fun HomeTile(label: String, icon: ImageVector, tint: ComposeColor, onCli
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SettingsDialog(viewModel: GameViewModel, onDismiss: () -> Unit) {
+private fun SettingsDialog(viewModel: GameViewModel, onCheckUpdate: () -> Unit, onDismiss: () -> Unit) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val colorTheme by viewModel.colorTheme.collectAsStateWithLifecycle()
     val tableSize by viewModel.rummikubTableSize.collectAsStateWithLifecycle()
     val blinkDuration by viewModel.rummikubBlinkDuration.collectAsStateWithLifecycle()
+    val checkingUpdate by viewModel.checkingUpdate.collectAsStateWithLifecycle()
     val dark = isDarkTheme(themeMode)
 
     AlertDialog(
@@ -310,6 +351,14 @@ private fun SettingsDialog(viewModel: GameViewModel, onDismiss: () -> Unit) {
                             label = { Text(duration.label, maxLines = 1) },
                         )
                     }
+                }
+                Text(
+                    "앱 버전 v${BuildConfig.VERSION_NAME}",
+                    Modifier.padding(top = 16.dp, bottom = 4.dp),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                TextButton(onClick = onCheckUpdate, enabled = !checkingUpdate) {
+                    Text(if (checkingUpdate) "확인 중…" else "업데이트 확인")
                 }
             }
         },

@@ -21,6 +21,47 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val mutableColorTheme = MutableStateFlow(AppSettings.loadColor(application))
     val colorTheme = mutableColorTheme.asStateFlow()
 
+    private val mutableUpdate = MutableStateFlow<AppRelease?>(null)
+    /** 켤 때 찾은 새 버전. 없으면 null이다. */
+    val update = mutableUpdate.asStateFlow()
+
+    private val mutableUpdateProgress = MutableStateFlow<Float?>(null)
+    val updateProgress = mutableUpdateProgress.asStateFlow()
+
+    private val mutableCheckingUpdate = MutableStateFlow(false)
+    val checkingUpdate = mutableCheckingUpdate.asStateFlow()
+
+    init {
+        viewModelScope.launch { mutableUpdate.value = AppUpdate.findNewerRelease() }
+    }
+
+    /** 설정에서 직접 누른 업데이트 확인. 새 버전이 있으면 설치 안내가 다시 뜨도록 넘겨준다. */
+    fun checkForUpdate(onResult: (UpdateCheck) -> Unit) {
+        if (mutableCheckingUpdate.value) return
+        mutableCheckingUpdate.value = true
+        viewModelScope.launch {
+            val result = AppUpdate.check()
+            if (result is UpdateCheck.Newer) mutableUpdate.value = result.release
+            mutableCheckingUpdate.value = false
+            onResult(result)
+        }
+    }
+
+    fun installUpdate() {
+        val release = mutableUpdate.value ?: return
+        if (mutableUpdateProgress.value != null) return
+        viewModelScope.launch {
+            mutableUpdateProgress.value = 0f
+            try {
+                AppUpdate.install(getApplication(), release) { mutableUpdateProgress.value = it }
+            } catch (e: Exception) {
+                Toast.makeText(getApplication(), "새 버전을 받지 못했습니다: ${e.message}", Toast.LENGTH_LONG).show()
+            } finally {
+                mutableUpdateProgress.value = null
+            }
+        }
+    }
+
     private val mutableRummikubTableSize = MutableStateFlow(AppSettings.loadRummikubTableSize(application))
     val rummikubTableSize = mutableRummikubTableSize.asStateFlow()
 
