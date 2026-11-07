@@ -87,4 +87,16 @@ object AppIcons {
             }
         }
     }
+
+    /** 주기율표 한 칸: 테두리 안에 왼쪽 위 번호 자리와 가운데 큰 기호 자리. */
+    val ElementMatch: ImageVector = materialIcon("App.ElementMatch") {
+        materialPath(pathFillType = PathFillType.EvenOdd) {
+            moveTo(3f, 3f); horizontalLineToRelative(18f); verticalLineToRelative(18f); horizontalLineTo(3f); close()
+            moveTo(5f, 5f); verticalLineToRelative(14f); horizontalLineToRelative(14f); verticalLineTo(5f); close()
+        }
+        materialPath {
+            moveTo(6.5f, 6.5f); horizontalLineToRelative(3f); verticalLineToRelative(3f); horizontalLineToRelative(-3f); close()
+            moveTo(8.5f, 11f); horizontalLineToRelative(7f); verticalLineToRelative(6.5f); horizontalLineToRelative(-7f); close()
+        }
+    }
 }

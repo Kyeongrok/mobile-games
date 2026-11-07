@@ -67,7 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /** 앱 안의 화면들이다. Home은 게임을 고르는 첫 화면이다. */
-private enum class Screen { Home, Sudoku, Shanghai, Riichi, FreeCell, Rummikub, Splendor }
+private enum class Screen { Home, Sudoku, Shanghai, Riichi, FreeCell, Rummikub, Splendor, ElementMatch }
 
 private class GameEntry(val label: String, val icon: ImageVector, val target: Screen)
 
@@ -78,6 +78,7 @@ private val GAME_ENTRIES = listOf(
     GameEntry("프리셀", AppIcons.FreeCell, Screen.FreeCell),
     GameEntry("루미큐브", AppIcons.Rummikub, Screen.Rummikub),
     GameEntry("스플렌더", AppIcons.Splendor, Screen.Splendor),
+    GameEntry("원소 짝맞추기", AppIcons.ElementMatch, Screen.ElementMatch),
 )
 
 class MainActivity : ComponentActivity() {
@@ -171,6 +172,7 @@ private fun MainScreen(viewModel: GameViewModel) {
                 Screen.FreeCell -> FreeCellTopBar(viewModel, onBack = home)
                 Screen.Rummikub -> RummikubTopBar(viewModel, onBack = home)
                 Screen.Splendor -> SplendorTopBar(viewModel, onBack = home)
+                Screen.ElementMatch -> ElementMatchTopBar(onBack = home)
                 Screen.Home -> TopAppBar(
                     title = { AppTitle() },
                     actions = {
@@ -194,6 +196,7 @@ private fun MainScreen(viewModel: GameViewModel) {
                 Screen.FreeCell -> FreeCellScreen(viewModel)
                 Screen.Rummikub -> RummikubScreen(viewModel)
                 Screen.Splendor -> SplendorScreen(viewModel)
+                Screen.ElementMatch -> ElementMatchScreen()
             }
         }
     }
