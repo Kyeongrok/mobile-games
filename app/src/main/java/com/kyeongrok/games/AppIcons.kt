@@ -99,4 +99,20 @@ object AppIcons {
             moveTo(8.5f, 11f); horizontalLineToRelative(7f); verticalLineToRelative(6.5f); horizontalLineToRelative(-7f); close()
         }
     }
+
+    /** 위에 벽돌 두 줄, 아래에 공 하나. */
+    val BrickBreaker: ImageVector = materialIcon("App.BrickBreaker") {
+        materialPath {
+            for (col in 0..2) {
+                moveTo(2f + col * 7f, 3f); horizontalLineToRelative(6f); verticalLineToRelative(4f); horizontalLineToRelative(-6f); close()
+            }
+            for (col in 0..1) {
+                moveTo(5.5f + col * 7f, 8.5f); horizontalLineToRelative(6f); verticalLineToRelative(4f); horizontalLineToRelative(-6f); close()
+            }
+            moveTo(12f, 16f)
+            arcToRelative(2.5f, 2.5f, 0f, true, true, 0f, 5f)
+            arcToRelative(2.5f, 2.5f, 0f, true, true, 0f, -5f)
+            close()
+        }
+    }
 }
