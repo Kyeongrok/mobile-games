@@ -50,6 +50,7 @@ object AppSettings {
     private const val KEY_RUMMIKUB_TABLE_SIZE = "rummikubTableSize"
     private const val KEY_RUMMIKUB_BLINK = "rummikubBlinkDuration"
     private const val KEY_LAST_SCREEN = "lastScreen"
+    private const val KEY_INSTALL_ID = "installId"
 
     fun loadTheme(context: Context): ThemeMode {
         val name = preferences(context).getString(KEY_THEME, null)
@@ -98,6 +99,15 @@ object AppSettings {
 
     fun saveLastScreen(context: Context, name: String) {
         preferences(context).edit().putString(KEY_LAST_SCREEN, name).apply()
+    }
+
+    /** 설치할 때 만든 무작위 번호 — 버그 리포트에 보낸 사람 대신 붙는다. 처음 부를 때 만든다. */
+    fun installId(context: Context): String {
+        val prefs = preferences(context)
+        prefs.getString(KEY_INSTALL_ID, null)?.let { return it }
+        val id = java.util.UUID.randomUUID().toString()
+        prefs.edit().putString(KEY_INSTALL_ID, id).apply()
+        return id
     }
 
     private fun preferences(context: Context) = context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)

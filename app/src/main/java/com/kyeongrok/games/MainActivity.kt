@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ElevatedCard
@@ -43,6 +45,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -53,6 +56,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -88,6 +92,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        BugReport.installCrashLog(this)
         enableEdgeToEdge()
 
         setContent {
@@ -159,7 +164,13 @@ private fun MainScreen(viewModel: GameViewModel) {
         mutableStateOf(Screen.entries.find { it.name == last } ?: Screen.Home)
     }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(screen) { AppSettings.saveLastScreen(context, screen.name) }
+    var bugOpen by rememberSaveable { mutableStateOf(false) }
+    // 버그 리포트에 붙일 마지막 게임 — 홈에서 리포트를 열어도 방금 하던 게임을 알 수 있게.
+    var lastGame by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(screen) {
+        AppSettings.saveLastScreen(context, screen.name)
+        if (screen != Screen.Home) lastGame = screen.name
+    }
     BackHandler(screen != Screen.Home) { screen = Screen.Home }
 
     val update by viewModel.update.collectAsStateWithLifecycle()
@@ -177,7 +188,18 @@ private fun MainScreen(viewModel: GameViewModel) {
         }
     }
 
-    if (settingsOpen) SettingsDialog(viewModel, onCheckUpdate = checkUpdate, onDismiss = { settingsOpen = false })
+    if (settingsOpen) SettingsDialog(
+        viewModel,
+        onCheckUpdate = checkUpdate,
+        onBugReport = { settingsOpen = false; bugOpen = true },
+        onDismiss = { settingsOpen = false },
+    )
+    if (bugOpen) BugReportDialog(
+        screen = screen.name,
+        lastGame = lastGame,
+        onSend = { text, bugContext -> bugOpen = false; viewModel.submitBug(text, bugContext) },
+        onDismiss = { bugOpen = false },
+    )
 
     update?.takeIf { !updateAsked }?.let { release ->
         AlertDialog(
@@ -208,6 +230,9 @@ private fun MainScreen(viewModel: GameViewModel) {
                 Screen.Home -> TopAppBar(
                     title = { AppTitle() },
                     actions = {
+                        IconButton(onClick = { bugOpen = true }) {
+                            Icon(Icons.Filled.Warning, contentDescription = "버그 리포트")
+                        }
                         IconButton(onClick = { settingsOpen = true }) {
                             Icon(Icons.Filled.Settings, contentDescription = "설정")
                         }
@@ -289,7 +314,12 @@ private fun HomeTile(label: String, icon: ImageVector, tint: ComposeColor, onCli
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SettingsDialog(viewModel: GameViewModel, onCheckUpdate: () -> Unit, onDismiss: () -> Unit) {
+private fun SettingsDialog(
+    viewModel: GameViewModel,
+    onCheckUpdate: () -> Unit,
+    onBugReport: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val colorTheme by viewModel.colorTheme.collectAsStateWithLifecycle()
     val tableSize by viewModel.rummikubTableSize.collectAsStateWithLifecycle()
@@ -360,6 +390,7 @@ private fun SettingsDialog(viewModel: GameViewModel, onCheckUpdate: () -> Unit, 
                 TextButton(onClick = onCheckUpdate, enabled = !checkingUpdate) {
                     Text(if (checkingUpdate) "확인 중…" else "업데이트 확인")
                 }
+                TextButton(onClick = onBugReport) { Text("버그 리포트") }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
@@ -379,4 +410,40 @@ private fun ColorSwatch(color: ColorTheme, selected: Boolean, onClick: () -> Uni
     ) {
         if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = ComposeColor.White)
     }
+}
+
+/** 버그 리포트 글 쓰는 창 — 무엇이 함께 가는지 아래에 보여 준다. 보내기를 누르면 onSend(글, 붙는 것). */
+@Composable
+private fun BugReportDialog(
+    screen: String,
+    lastGame: String?,
+    onSend: (String, org.json.JSONObject) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val bugContext = remember(screen, lastGame) { BugReport.collect(context, screen, lastGame) }
+    var text by rememberSaveable { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("버그 리포트") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("무엇이 어떻게 잘못됐는지 적어 주세요(어느 게임 · 무엇을 했더니 · 어떻게 됐나).")
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.take(BugReport.MAX_TEXT) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp).padding(vertical = 8.dp),
+                )
+                Text(
+                    BugReport.summary(bugContext),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSend(text, bugContext) }, enabled = text.isNotBlank()) { Text("보내기") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+    )
 }

@@ -33,6 +33,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch { mutableUpdate.value = AppUpdate.findNewerRelease() }
+        // 지난번에 못 보낸 버그 리포트가 있으면 조용히 다시 보낸다.
+        viewModelScope.launch { BugReport.upload(application) }
+    }
+
+    /** 버그 리포트 한 건을 줄에 세우고 보낸다. 못 보내면 다음에 켤 때 다시 보낸다. */
+    fun submitBug(text: String, context: org.json.JSONObject) {
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            val queued = withContext(Dispatchers.IO) { BugReport.enqueue(app, text, context) }
+            val message = when {
+                !queued -> "버그 리포트를 적어 두지 못했습니다"
+                BugReport.upload(app) -> "보냈습니다 — 고맙습니다"
+                else -> "지금은 못 보냈습니다 — 다음에 켤 때 다시 보냅니다"
+            }
+            Toast.makeText(app, message, Toast.LENGTH_SHORT).show()
+        }
     }
 
     /** 설정에서 직접 누른 업데이트 확인. 새 버전이 있으면 설치 안내가 다시 뜨도록 넘겨준다. */

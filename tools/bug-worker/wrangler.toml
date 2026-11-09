@@ -1,0 +1,9 @@
+name = "mobile-games"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# 게임 앱 버그 리포트 — `wrangler d1 create mobile-games` 가 찍어 준 database_id.
+[[d1_databases]]
+binding = "DB"
+database_name = "mobile-games"
+database_id = "904bb14e-bf69-4d46-9236-da9e783c1018"

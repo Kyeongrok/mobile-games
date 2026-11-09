@@ -12,6 +12,8 @@ YoutubeMp3 안드로이드 앱에서 분리한 게임 모음입니다. Android 1
 
 진행 중인 판은 자동 저장되어 다시 켜면 이어서 합니다.
 
+홈 위 ⚠ 버튼(또는 설정의 「버그 리포트」)으로 버그를 적어 보내면 앱 버전 · 기기 · 마지막 게임 · 오류 기록 끝이 함께 갑니다. 받는 곳은 [`tools/bug-worker`](tools/bug-worker/README.md)(Cloudflare Worker + D1)입니다.
+
 ## 빌드
 
 ```sh
