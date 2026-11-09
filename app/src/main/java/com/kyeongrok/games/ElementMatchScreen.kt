@@ -107,7 +107,7 @@ class ElementMatchViewModel(application: Application) : AndroidViewModel(applica
         val next = game.flip(index)
         mutableGame.value = next
         if (next.isComplete && !game.isComplete) {
-            val record = ElementMatchRecord(System.currentTimeMillis(), next.seconds, next.tries, next.pairs, next.range)
+            val record = ElementMatchRecord(System.currentTimeMillis(), next.seconds, next.tries, next.pairs, next.range, next.misses)
             mutableRecords.value = listOf(record) + mutableRecords.value
             ElementMatchRecords.save(getApplication(), mutableRecords.value)
         }
@@ -244,6 +244,17 @@ fun ElementMatchScreen() {
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
                     )
+                    // 평균 — 같은 범위 · 카드 수의 기록 모두(이번 판 포함, 기록 맨 앞에 막 들어갔다)
+                    val same = records.filter { it.range == game.range && it.pairs == game.pairs }
+                    if (same.isNotEmpty()) {
+                        Text(
+                            "평균 ${formatDuration(same.sumOf { it.seconds } / same.size)} (${same.size}판)",
+                            Modifier.padding(top = 8.dp),
+                        )
+                    }
+                    Text("자주 틀린 원소", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall)
+                    Text("이번 판: " + missLine(topMisses(listOf(game.misses), 3)), style = MaterialTheme.typography.bodyMedium)
+                    Text("지금까지: " + missLine(topMisses(records.map { it.misses }, 5)), style = MaterialTheme.typography.bodyMedium)
                 }
             },
             confirmButton = { TextButton(onClick = next) { Text("새 게임") } },
@@ -442,3 +453,10 @@ private fun finishVersusBest(seconds: Int, best: Int?): String = when {
     seconds == best -> "최고 기록(${formatDuration(best)})과 같습니다"
     else -> "최고 기록(${formatDuration(best)})보다 ${formatDuration(seconds - best)} 늦었습니다"
 }
+
+/** 「질소 N 3번 · 붕소 B 2번」 — 없으면 「없음」. */
+private fun missLine(top: List<Pair<Int, Int>>): String =
+    if (top.isEmpty()) "없음" else top.joinToString(" · ") { (number, count) ->
+        val element = PeriodicTable.get(number)
+        "${element.name} ${element.symbol} ${count}번"
+    }

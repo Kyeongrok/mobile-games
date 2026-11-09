@@ -99,6 +99,8 @@ data class ElementMatchGame(
     val range: ElementRange,
     /** 가장 최근에 맞춘 원소 번호. */
     val lastMatch: Int? = null,
+    /** 원소 번호별로 틀린 횟수 — 짝이 아닌 두 장을 뒤집으면 두 원소 모두 하나씩 센다. */
+    val misses: Map<Int, Int> = emptyMap(),
 ) {
     val pairs: Int get() = cards.size / 2
     val isComplete: Boolean get() = matched.size == cards.size
@@ -114,7 +116,10 @@ data class ElementMatchGame(
         return if (cards[first].number == cards[index].number) {
             copy(matched = matched + first + index, open = emptyList(), tries = tries + 1, lastMatch = cards[index].number)
         } else {
-            copy(open = listOf(first, index), tries = tries + 1)
+            val a = cards[first].number
+            val b = cards[index].number
+            val counted = misses + (a to (misses[a] ?: 0) + 1)
+            copy(open = listOf(first, index), tries = tries + 1, misses = counted + (b to (counted[b] ?: 0) + 1))
         }
     }
 
@@ -135,7 +140,17 @@ data class ElementMatchRecord(
     val tries: Int,
     val pairs: Int,
     val range: ElementRange,
+    /** 그 판에서 틀린 원소 번호별 횟수. 예전 기록에는 없다. */
+    val misses: Map<Int, Int> = emptyMap(),
 )
+
+/** 여러 판의 틀린 횟수를 합쳐 많이 틀린 순서로 n 개. 같으면 번호가 작은 것부터. */
+fun topMisses(misses: List<Map<Int, Int>>, n: Int): List<Pair<Int, Int>> {
+    val total = mutableMapOf<Int, Int>()
+    misses.forEach { game -> game.forEach { (number, count) -> total[number] = (total[number] ?: 0) + count } }
+    return total.entries.sortedWith(compareByDescending<Map.Entry<Int, Int>> { it.value }.thenBy { it.key })
+        .take(n).map { it.key to it.value }
+}
 
 object ElementMatchRecords {
     private const val FILE_NAME = "element-match-records.json"
@@ -150,6 +165,7 @@ object ElementMatchRecords {
                 item.getInt("tries"),
                 item.getInt("pairs"),
                 ElementRange.entries.find { it.name == item.optString("range") } ?: ElementRange.Easy,
+                item.optJSONObject("misses")?.let { m -> m.keys().asSequence().associate { it.toInt() to m.getInt(it) } } ?: emptyMap(),
             )
         }
     }
@@ -163,7 +179,8 @@ object ElementMatchRecords {
                     .put("seconds", record.seconds)
                     .put("tries", record.tries)
                     .put("pairs", record.pairs)
-                    .put("range", record.range.name),
+                    .put("range", record.range.name)
+                    .put("misses", JSONObject(record.misses.mapKeys { it.key.toString() })),
             )
         }
         RecordFile.write(context, FILE_NAME, array)

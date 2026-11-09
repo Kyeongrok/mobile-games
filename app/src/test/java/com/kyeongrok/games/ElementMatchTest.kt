@@ -47,4 +47,16 @@ class ElementMatchTest {
         assertEquals(2, game.tries)
         assertFalse(game.isComplete)
     }
+
+    @Test
+    fun mismatchCountsBothElementsAndTopMissesSortsByCount() {
+        val cards = listOf(ElementCard(1, true), ElementCard(2, true), ElementCard(1, false), ElementCard(3, true), ElementCard(2, false), ElementCard(3, false))
+        var game = ElementMatchGame(cards, range = ElementRange.Easy)
+        game = game.flip(0).flip(1).hideMismatch()   // 1 · 2 틀림
+        game = game.flip(0).flip(3).hideMismatch()   // 1 · 3 틀림
+        assertEquals(mapOf(1 to 2, 2 to 1, 3 to 1), game.misses)
+        game = game.flip(0).flip(2)                  // 1 맞춤 — 세지 않는다
+        assertEquals(mapOf(1 to 2, 2 to 1, 3 to 1), game.misses)
+        assertEquals(listOf(1 to 3, 2 to 1), topMisses(listOf(game.misses, mapOf(1 to 1)), 2))
+    }
 }
