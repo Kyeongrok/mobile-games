@@ -14,6 +14,9 @@ class ElementMatchTest {
         assertEquals("철", PeriodicTable.get(26).name)
         assertEquals("Og", PeriodicTable.get(118).symbol)
         assertEquals(118, PeriodicTable.ELEMENTS.map { it.symbol }.toSet().size)
+        assertEquals("Iron", PeriodicTable.get(26).english)
+        assertEquals("Nitrogen", PeriodicTable.get(7).english)
+        assertEquals("Oganesson", PeriodicTable.get(118).english)
     }
 
     @Test

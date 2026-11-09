@@ -312,7 +312,7 @@ private fun ElementMatchStatus(game: ElementMatchGame, best: Int?, modifier: Mod
         if (lastNumber != null) {
             val element = PeriodicTable.get(lastNumber)
             Text(
-                "${element.number}번 ${element.symbol} · ${element.name} · ${element.category.label}",
+                "${element.number}번 ${element.symbol} · ${element.name} (${element.english}) · ${element.category.label}",
                 Modifier.padding(top = 4.dp),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,

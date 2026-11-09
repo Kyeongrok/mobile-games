@@ -5,8 +5,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.random.Random
 
-/** 주기율표의 원소 하나. 이름은 대한화학회 표기를 따른다. */
-data class Element(val number: Int, val symbol: String, val name: String) {
+/** 주기율표의 원소 하나. 이름은 대한화학회 표기를, 영문명은 IUPAC 표기를 따른다. */
+data class Element(val number: Int, val symbol: String, val name: String, val english: String) {
     val category: ElementCategory get() = ElementCategory.of(number)
 }
 
@@ -53,9 +53,26 @@ object PeriodicTable {
             "Md 멘델레븀,No 노벨륨,Lr 로렌슘,Rf 러더포듐,Db 더브늄,Sg 시보귬,Bh 보륨,Hs 하슘,Mt 마이트너륨,Ds 다름슈타튬," +
             "Rg 뢴트게늄,Cn 코페르니슘,Nh 니호늄,Fl 플레로븀,Mc 모스코븀,Lv 리버모륨,Ts 테네신,Og 오가네손"
 
+    /** 영문명 — DATA 와 같은 순서(1번부터), 빈칸으로 나눈다. */
+    private const val ENGLISH =
+            "Hydrogen Helium Lithium Beryllium Boron Carbon Nitrogen Oxygen Fluorine Neon " +
+            "Sodium Magnesium Aluminium Silicon Phosphorus Sulfur Chlorine Argon Potassium Calcium " +
+            "Scandium Titanium Vanadium Chromium Manganese Iron Cobalt Nickel Copper Zinc " +
+            "Gallium Germanium Arsenic Selenium Bromine Krypton Rubidium Strontium Yttrium Zirconium " +
+            "Niobium Molybdenum Technetium Ruthenium Rhodium Palladium Silver Cadmium Indium Tin " +
+            "Antimony Tellurium Iodine Xenon Caesium Barium Lanthanum Cerium Praseodymium Neodymium " +
+            "Promethium Samarium Europium Gadolinium Terbium Dysprosium Holmium Erbium Thulium Ytterbium " +
+            "Lutetium Hafnium Tantalum Tungsten Rhenium Osmium Iridium Platinum Gold Mercury " +
+            "Thallium Lead Bismuth Polonium Astatine Radon Francium Radium Actinium Thorium " +
+            "Protactinium Uranium Neptunium Plutonium Americium Curium Berkelium Californium Einsteinium Fermium " +
+            "Mendelevium Nobelium Lawrencium Rutherfordium Dubnium Seaborgium Bohrium Hassium Meitnerium Darmstadtium " +
+            "Roentgenium Copernicium Nihonium Flerovium Moscovium Livermorium Tennessine Oganesson"
+
+    private val ENGLISH_NAMES = ENGLISH.split(' ')
+
     val ELEMENTS: List<Element> = DATA.split(',').mapIndexed { index, entry ->
         val (symbol, name) = entry.split(' ')
-        Element(index + 1, symbol, name)
+        Element(index + 1, symbol, name, ENGLISH_NAMES[index])
     }
 
     fun get(number: Int): Element = ELEMENTS[number - 1]
