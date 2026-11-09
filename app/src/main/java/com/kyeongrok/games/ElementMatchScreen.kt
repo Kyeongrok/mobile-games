@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -205,6 +206,7 @@ fun ElementMatchTopBar(onBack: () -> Unit) {
 fun ElementMatchScreen() {
     val viewModel: ElementMatchViewModel = viewModel()
     val game by viewModel.game.collectAsStateWithLifecycle()
+    val records by viewModel.records.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
     LifecycleResumeEffect(Unit) {
@@ -215,6 +217,37 @@ fun ElementMatchScreen() {
             }
         }
         onPauseOrDispose { timer.cancel() }
+    }
+
+    // 다 맞추면 마지막 카드가 뒤집히는 것을 잠깐 보여 준 뒤 결과 창을 띄운다. 창을 닫으면(누르면) 새 게임.
+    var doneOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(game.isComplete) {
+        doneOpen = false
+        if (game.isComplete) {
+            delay(600)
+            doneOpen = true
+        }
+    }
+    if (doneOpen && game.isComplete) {
+        val best = bestSeconds(game, records)
+        val next = { doneOpen = false; viewModel.newGame() }
+        AlertDialog(
+            onDismissRequest = next,
+            title = { Text(if (best != null && game.seconds < best) "새 기록!" else "모두 맞췄습니다!") },
+            text = {
+                Column {
+                    Text("${formatDuration(game.seconds)} · 시도 ${game.tries}번 · ${game.range.label} ${game.pairs}쌍")
+                    Text(
+                        finishVersusBest(game.seconds, best),
+                        Modifier.padding(top = 8.dp),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            },
+            confirmButton = { TextButton(onClick = next) { Text("새 게임") } },
+        )
     }
 
     // 짝이 아닌 두 장은 잠깐 보여 주고 다시 덮는다.
@@ -228,7 +261,7 @@ fun ElementMatchScreen() {
     BoxWithConstraints(Modifier.fillMaxSize().padding(12.dp)) {
         val rows = (game.cards.size + COLUMNS - 1) / COLUMNS
         val gap = 8.dp
-        val statusHeight = 96.dp
+        val statusHeight = 120.dp
         val cardWidth = min(
             (maxWidth - gap * (COLUMNS - 1)) / COLUMNS,
             ((maxHeight - statusHeight - gap * (rows - 1)) / rows) / CARD_RATIO,
@@ -253,13 +286,13 @@ fun ElementMatchScreen() {
                     }
                 }
             }
-            ElementMatchStatus(game, Modifier.fillMaxWidth().padding(top = 12.dp))
+            ElementMatchStatus(game, bestSeconds(game, records), Modifier.fillMaxWidth().padding(top = 12.dp))
         }
     }
 }
 
 @Composable
-private fun ElementMatchStatus(game: ElementMatchGame, modifier: Modifier) {
+private fun ElementMatchStatus(game: ElementMatchGame, best: Int?, modifier: Modifier) {
     val lastNumber = game.lastMatch
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
@@ -269,6 +302,12 @@ private fun ElementMatchStatus(game: ElementMatchGame, modifier: Modifier) {
                 "${formatDuration(game.seconds)} · 시도 ${game.tries}번 · 남은 짝 ${game.pairs - game.matched.size / 2}"
             },
             color = if (game.isComplete) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            compareToBest(game, best),
+            Modifier.padding(top = 2.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (lastNumber != null) {
             val element = PeriodicTable.get(lastNumber)
@@ -339,13 +378,14 @@ private fun CardFront(card: ElementCard, width: Dp, modifier: Modifier) {
     val element = PeriodicTable.get(card.number)
     val fill = Color(element.category.color)
     Box(modifier.background(fill, CardShape).border(1.dp, CardInk.copy(alpha = 0.25f), CardShape)) {
+        // 원소 번호 — 기호 카드와 이름 카드 모두 왼쪽 위에.
+        Text(
+            element.number.toString(),
+            Modifier.align(Alignment.TopStart).padding(start = 6.dp, top = 4.dp),
+            color = CardInk,
+            style = MaterialTheme.typography.labelMedium,
+        )
         if (card.isSymbol) {
-            Text(
-                element.number.toString(),
-                Modifier.align(Alignment.TopStart).padding(start = 6.dp, top = 4.dp),
-                color = CardInk,
-                style = MaterialTheme.typography.labelMedium,
-            )
             Text(
                 element.symbol,
                 Modifier.align(Alignment.Center),
@@ -370,4 +410,35 @@ private fun CardFront(card: ElementCard, width: Dp, modifier: Modifier) {
             )
         }
     }
+}
+
+/**
+ * 같은 범위 · 같은 카드 수에서 가장 빠른 기록(초). 없으면 null.
+ * 다 맞춘 판은 기록 맨 앞에 막 들어갔으므로 그것을 빼고 견준다.
+ */
+private fun bestSeconds(game: ElementMatchGame, records: List<ElementMatchRecord>): Int? =
+    (if (game.isComplete) records.drop(1) else records)
+        .filter { it.range == game.range && it.pairs == game.pairs }
+        .minOfOrNull { it.seconds }
+
+/** 가장 빠른 기록과 지금 시간의 차이. 하는 중에는 남은 시간 · 넘긴 시간을, 다 맞추면 빠르고 느린 정도를 보여 준다. */
+private fun compareToBest(game: ElementMatchGame, best: Int?): String {
+    if (best == null) return if (game.isComplete) "이 설정의 첫 기록입니다" else "이 설정(${game.range.label} ${game.pairs}쌍)의 기록이 아직 없습니다"
+    val diff = game.seconds - best
+    val head = "최고 기록 ${formatDuration(best)} · "
+    return head + when {
+        game.isComplete && diff < 0 -> "${formatDuration(-diff)} 빨라 새 기록!"
+        game.isComplete && diff == 0 -> "최고 기록과 같습니다"
+        game.isComplete -> "${formatDuration(diff)} 느림"
+        diff <= 0 -> "${formatDuration(-diff)} 남음"
+        else -> "${formatDuration(diff)} 넘김"
+    }
+}
+
+/** 결과 창의 한 줄 — 가장 빠른 기록보다 얼마나 빨리(늦게) 했는지. */
+private fun finishVersusBest(seconds: Int, best: Int?): String = when {
+    best == null -> "이 설정의 첫 기록입니다"
+    seconds < best -> "최고 기록(${formatDuration(best)})보다 ${formatDuration(best - seconds)} 빨리 했습니다"
+    seconds == best -> "최고 기록(${formatDuration(best)})과 같습니다"
+    else -> "최고 기록(${formatDuration(best)})보다 ${formatDuration(seconds - best)} 늦었습니다"
 }
