@@ -126,4 +126,20 @@ object AppIcons {
             verticalLineTo(8f); horizontalLineTo(15f); close()
         }
     }
+
+    /** 다리를 지나는 트럭 — 다리 위 트럭. */
+    val Bridge: ImageVector = materialIcon("App.Bridge") {
+        materialPath {
+            // 짐칸과 운전석
+            moveTo(2f, 6f); horizontalLineTo(14f); verticalLineTo(14f); horizontalLineTo(2f); close()
+            moveTo(15f, 9f); horizontalLineTo(19f); lineTo(22f, 12f); verticalLineTo(14f); horizontalLineTo(15f); close()
+            // 바퀴
+            moveTo(6f, 14.5f); arcToRelative(1.75f, 1.75f, 0f, true, true, 0f, 3.5f); arcToRelative(1.75f, 1.75f, 0f, true, true, 0f, -3.5f); close()
+            moveTo(18f, 14.5f); arcToRelative(1.75f, 1.75f, 0f, true, true, 0f, 3.5f); arcToRelative(1.75f, 1.75f, 0f, true, true, 0f, -3.5f); close()
+            // 다리 바닥과 기둥
+            moveTo(1f, 19f); horizontalLineTo(23f); verticalLineTo(20.5f); horizontalLineTo(1f); close()
+            moveTo(3f, 20.5f); horizontalLineTo(4.5f); verticalLineTo(23f); horizontalLineTo(3f); close()
+            moveTo(19.5f, 20.5f); horizontalLineTo(21f); verticalLineTo(23f); horizontalLineTo(19.5f); close()
+        }
+    }
 }
