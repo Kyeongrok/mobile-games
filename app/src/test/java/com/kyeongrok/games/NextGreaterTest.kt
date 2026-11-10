@@ -35,9 +35,16 @@ class NextGreaterTest {
     fun autoStepsMatchSolveOnRandomProblems() {
         val random = Random(7)
         repeat(200) {
-            val game = NextGreaterGame.random(random)
+            val game = NextGreaterGame.random(random.nextInt(2, 10), random)
             while (!game.finished) assertTrue(game.step())
             assertEquals(NextGreaterGame.solve(game.numbers), game.answer.toList())
         }
+    }
+
+    @Test
+    fun randomUsesRequestedCount() {
+        assertEquals(9, NextGreaterGame.random(9).numbers.size)
+        assertEquals(9, NextGreaterGame.random(20).numbers.size)
+        assertEquals(2, NextGreaterGame.random(0).numbers.size)
     }
 }

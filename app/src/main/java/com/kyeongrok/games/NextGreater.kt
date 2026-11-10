@@ -112,9 +112,12 @@ class NextGreaterGame(val numbers: List<Int>) {
             "return answer;",
         )
 
-        /** 6 ~ 8 칸, 1 ~ 9 (겹치는 수도 나온다). */
-        fun random(random: Random = Random): NextGreaterGame =
-            NextGreaterGame(List(random.nextInt(6, 9)) { random.nextInt(1, 10) })
+        const val MIN_COUNT = 2
+        const val MAX_COUNT = 9
+
+        /** count 칸([MIN_COUNT] ~ [MAX_COUNT]), 값은 1 ~ 9 (겹치는 수도 나온다). */
+        fun random(count: Int, random: Random = Random): NextGreaterGame =
+            NextGreaterGame(List(count.coerceIn(MIN_COUNT, MAX_COUNT)) { random.nextInt(1, 10) })
 
         /** 정답(보통 풀이) — 검사용. */
         fun solve(numbers: List<Int>): List<Int> {

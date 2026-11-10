@@ -75,8 +75,23 @@ class NextGreaterViewModel : ViewModel() {
     }
 
     fun restart() = load(NextGreaterGame(game.numbers))
-    fun example() = load(NextGreaterGame(NextGreaterGame.EXAMPLE))
-    fun random() = load(NextGreaterGame.random())
+    /** 새 문제의 숫자 개수. */
+    var count by mutableIntStateOf(NextGreaterGame.EXAMPLE.size)
+        private set
+
+    fun example() {
+        count = NextGreaterGame.EXAMPLE.size
+        load(NextGreaterGame(NextGreaterGame.EXAMPLE))
+    }
+    fun random() = load(NextGreaterGame.random(count))
+
+    /** 개수를 바꾸면 그 개수로 바로 새 문제. */
+    fun changeCount(delta: Int) {
+        val next = (count + delta).coerceIn(NextGreaterGame.MIN_COUNT, NextGreaterGame.MAX_COUNT)
+        if (next == count) return
+        count = next
+        random()
+    }
 
     private fun load(next: NextGreaterGame) {
         game = next
@@ -122,8 +137,22 @@ fun NextGreaterScreen() {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("숫자 개수", style = MaterialTheme.typography.bodyMedium)
+            TextButton(
+                onClick = { viewModel.changeCount(-1) },
+                enabled = viewModel.count > NextGreaterGame.MIN_COUNT,
+            ) { Text("−", fontSize = 20.sp) }
+            Text("${viewModel.count}", style = MaterialTheme.typography.titleMedium)
+            TextButton(
+                onClick = { viewModel.changeCount(1) },
+                enabled = viewModel.count < NextGreaterGame.MAX_COUNT,
+            ) { Text("+", fontSize = 20.sp) }
+            Spacer(Modifier.weight(1f))
+            Text("틀린 횟수 ${game.mistakes}", style = MaterialTheme.typography.bodyMedium)
+        }
         Text(
-            "numbers = [${game.numbers.joinToString(", ")}]   틀린 횟수 ${game.mistakes}",
+            "numbers = [${game.numbers.joinToString(", ")}]",
             style = MaterialTheme.typography.bodyMedium,
         )
         NumberRow(game)
