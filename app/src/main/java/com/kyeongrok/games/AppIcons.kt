@@ -115,4 +115,15 @@ object AppIcons {
             close()
         }
     }
+
+    /** 스택 — 쌓인 상자 셋과 위로 꺼내는 화살표. */
+    val NextGreater: ImageVector = materialIcon("App.NextGreater") {
+        materialPath {
+            for (k in 0..2) {
+                moveTo(3f, 19f - k * 5f); horizontalLineToRelative(12f); verticalLineToRelative(4f); horizontalLineToRelative(-12f); close()
+            }
+            moveTo(19f, 3f); lineTo(23f, 8f); horizontalLineTo(20.25f); verticalLineTo(16f); horizontalLineTo(17.75f)
+            verticalLineTo(8f); horizontalLineTo(15f); close()
+        }
+    }
 }
