@@ -2,6 +2,8 @@ package com.kyeongrok.games
 
 import android.app.Application
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.SoundPool
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -56,6 +58,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.pow
 import kotlin.math.sin
 
 private typealias JG = JewelGame
@@ -80,6 +83,19 @@ class JewelViewModel(application: Application) : AndroidViewModel(application) {
     /** 판 위에 잠깐 띄우는 글(연쇄 · 섞기). */
     var banner by mutableStateOf<String?>(null)
         private set
+    var soundOn by mutableStateOf(preferences.getBoolean("sound", true))
+        private set
+    /** 사라질 때 나는 소리(CC0 「3 pop sounds」 by wubitog, OpenGameArt). 연쇄가 이어질수록 높게 낸다. */
+    private val sounds = SoundPool.Builder()
+        .setMaxStreams(4)
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_GAME)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build(),
+        )
+        .build()
+    private val pops = listOf(R.raw.jewel_pop1, R.raw.jewel_pop2, R.raw.jewel_pop3).map { sounds.load(application, it, 1) }
     var best by mutableIntStateOf(preferences.getInt("best", 0))
         private set
     var bestAtStart = best
@@ -119,6 +135,7 @@ class JewelViewModel(application: Application) : AndroidViewModel(application) {
                 val cells = game.matches()
                 if (cells.isEmpty()) break
                 clearing = cells.mapNotNull { game[it]?.id }.toSet()
+                playPop(game.chain + 1)
                 delay(CLEAR_MS)
                 game.clear(cells)
                 if (game.chain >= 2) banner = "${game.chain}연쇄 ×${game.chain}"
@@ -140,6 +157,22 @@ class JewelViewModel(application: Application) : AndroidViewModel(application) {
             delay(BANNER_MS)
             if (!busy) banner = null
         }
+    }
+
+    /** chain 번째 연쇄의 소리 — 세 가지 소리를 돌려 쓰고, 연쇄마다 반음 셋씩(최대 두 배) 높인다. */
+    private fun playPop(chain: Int) {
+        if (!soundOn) return
+        val rate = 2.0.pow((chain - 1) * 3 / 12.0).toFloat().coerceAtMost(2f)
+        sounds.play(pops[(chain - 1) % pops.size], 0.8f, 0.8f, 1, 0, rate)
+    }
+
+    fun toggleSound() {
+        soundOn = !soundOn
+        preferences.edit().putBoolean("sound", soundOn).apply()
+    }
+
+    override fun onCleared() {
+        sounds.release()
     }
 
     fun showHint() {
@@ -183,7 +216,10 @@ fun JewelTopBar(onBack: () -> Unit) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
             }
         },
-        actions = { TextButton(onClick = viewModel::newGame, enabled = !viewModel.busy) { Text("새 게임") } },
+        actions = {
+            TextButton(onClick = viewModel::toggleSound) { Text(if (viewModel.soundOn) "소리 켬" else "소리 끔") }
+            TextButton(onClick = viewModel::newGame, enabled = !viewModel.busy) { Text("새 게임") }
+        },
     )
 }
 

@@ -155,4 +155,14 @@ object AppIcons {
             moveTo(13.5f, 13.5f); horizontalLineToRelative(7.5f); verticalLineToRelative(7.5f); horizontalLineToRelative(-7.5f); close()
         }
     }
+
+    /** 보석 미로 — 엇갈린 벽 사이로 내려가는 길과 오른쪽 위 보석. */
+    val GemMaze: ImageVector = materialIcon("App.GemMaze") {
+        materialPath {
+            moveTo(2f, 8f); horizontalLineTo(14f); verticalLineTo(10.5f); horizontalLineTo(2f); close()
+            moveTo(8f, 14f); horizontalLineTo(22f); verticalLineTo(16.5f); horizontalLineTo(8f); close()
+            moveTo(2f, 20f); horizontalLineTo(14f); verticalLineTo(22.5f); horizontalLineTo(2f); close()
+            moveTo(18.5f, 2f); lineTo(22f, 6f); lineTo(18.5f, 10f); lineTo(15f, 6f); close()
+        }
+    }
 }
