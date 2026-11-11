@@ -142,4 +142,17 @@ object AppIcons {
             moveTo(19.5f, 20.5f); horizontalLineTo(21f); verticalLineTo(23f); horizontalLineTo(19.5f); close()
         }
     }
+
+    /** 보석 맞추기 — 2×2 칸에 마름모 · 동그라미 · 세모 · 네모. */
+    val Jewel: ImageVector = materialIcon("App.Jewel") {
+        materialPath {
+            moveTo(7f, 1.5f); lineTo(11.5f, 6.5f); lineTo(7f, 11.5f); lineTo(2.5f, 6.5f); close()
+            moveTo(17f, 2.5f)
+            arcToRelative(4f, 4f, 0f, true, true, 0f, 8f)
+            arcToRelative(4f, 4f, 0f, true, true, 0f, -8f)
+            close()
+            moveTo(7f, 13f); lineTo(11.5f, 21.5f); horizontalLineTo(2.5f); close()
+            moveTo(13.5f, 13.5f); horizontalLineToRelative(7.5f); verticalLineToRelative(7.5f); horizontalLineToRelative(-7.5f); close()
+        }
+    }
 }
