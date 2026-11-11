@@ -86,7 +86,13 @@ enum class ElementRange(val label: String, val last: Int) {
     All("전체 118", 118),
 }
 
-/** 한 장의 카드. 짝이 되는 두 장은 같은 원소의 기호 카드와 이름 카드다. */
+/** 기호 카드의 짝 — 이름 카드(이름 맞추기)인지 번호 카드(번호 맞추기)인지. */
+enum class ElementMatchMode(val label: String) {
+    Name("이름 맞추기"),
+    Number("번호 맞추기"),
+}
+
+/** 한 장의 카드. 짝이 되는 두 장은 같은 원소의 기호 카드와 짝 카드(모드에 따라 이름 · 번호)다. */
 data class ElementCard(val number: Int, val isSymbol: Boolean)
 
 data class ElementMatchGame(
@@ -97,6 +103,7 @@ data class ElementMatchGame(
     val tries: Int = 0,
     val seconds: Int = 0,
     val range: ElementRange,
+    val mode: ElementMatchMode = ElementMatchMode.Name,
     /** 가장 최근에 맞춘 원소 번호. */
     val lastMatch: Int? = null,
     /** 원소 번호별로 틀린 횟수 — 짝이 아닌 두 장을 뒤집으면 두 원소 모두 하나씩 센다. */
@@ -126,10 +133,15 @@ data class ElementMatchGame(
     fun hideMismatch(): ElementMatchGame = if (isMismatchShowing) copy(open = emptyList()) else this
 
     companion object {
-        fun create(range: ElementRange, pairs: Int, random: Random = Random): ElementMatchGame {
+        fun create(
+            range: ElementRange,
+            pairs: Int,
+            random: Random = Random,
+            mode: ElementMatchMode = ElementMatchMode.Name,
+        ): ElementMatchGame {
             val numbers = (1..range.last).shuffled(random).take(pairs)
             val cards = numbers.flatMap { listOf(ElementCard(it, true), ElementCard(it, false)) }.shuffled(random)
-            return ElementMatchGame(cards, range = range)
+            return ElementMatchGame(cards, range = range, mode = mode)
         }
     }
 }
@@ -142,6 +154,8 @@ data class ElementMatchRecord(
     val range: ElementRange,
     /** 그 판에서 틀린 원소 번호별 횟수. 예전 기록에는 없다. */
     val misses: Map<Int, Int> = emptyMap(),
+    /** 예전 기록은 모두 이름 맞추기. */
+    val mode: ElementMatchMode = ElementMatchMode.Name,
 )
 
 /** 여러 판의 틀린 횟수를 합쳐 많이 틀린 순서로 n 개. 같으면 번호가 작은 것부터. */
@@ -166,6 +180,7 @@ object ElementMatchRecords {
                 item.getInt("pairs"),
                 ElementRange.entries.find { it.name == item.optString("range") } ?: ElementRange.Easy,
                 item.optJSONObject("misses")?.let { m -> m.keys().asSequence().associate { it.toInt() to m.getInt(it) } } ?: emptyMap(),
+                ElementMatchMode.entries.find { it.name == item.optString("mode") } ?: ElementMatchMode.Name,
             )
         }
     }
@@ -180,7 +195,8 @@ object ElementMatchRecords {
                     .put("tries", record.tries)
                     .put("pairs", record.pairs)
                     .put("range", record.range.name)
-                    .put("misses", JSONObject(record.misses.mapKeys { it.key.toString() })),
+                    .put("misses", JSONObject(record.misses.mapKeys { it.key.toString() }))
+                    .put("mode", record.mode.name),
             )
         }
         RecordFile.write(context, FILE_NAME, array)

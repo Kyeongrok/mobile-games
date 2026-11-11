@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -68,6 +69,8 @@ private const val CARD_RATIO = 1.25f // 세로 / 가로
 private val PAIR_CHOICES = listOf(6, 8, 10)
 private val CardShape = RoundedCornerShape(8.dp)
 private val CardInk = Color(0xFF1F1F1F)
+/** 결과 창 그래프에 보일 최근 판 수. */
+private const val CHART_GAMES = 20
 
 class ElementMatchViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = application.getSharedPreferences("element-match", Context.MODE_PRIVATE)
@@ -80,14 +83,27 @@ class ElementMatchViewModel(application: Application) : AndroidViewModel(applica
     private val mutablePairs = MutableStateFlow(preferences.getInt("pairs", 8).takeIf { it in PAIR_CHOICES } ?: 8)
     val pairs: StateFlow<Int> = mutablePairs
 
-    private val mutableGame = MutableStateFlow(ElementMatchGame.create(mutableRange.value, mutablePairs.value))
+    private val mutableMode = MutableStateFlow(
+        ElementMatchMode.entries.find { it.name == preferences.getString("mode", null) } ?: ElementMatchMode.Name,
+    )
+    val mode: StateFlow<ElementMatchMode> = mutableMode
+
+    private val mutableGame = MutableStateFlow(create())
     val game: StateFlow<ElementMatchGame> = mutableGame
 
     private val mutableRecords = MutableStateFlow(ElementMatchRecords.load(application))
     val records: StateFlow<List<ElementMatchRecord>> = mutableRecords
 
+    private fun create() = ElementMatchGame.create(mutableRange.value, mutablePairs.value, mode = mutableMode.value)
+
     fun newGame() {
-        mutableGame.value = ElementMatchGame.create(mutableRange.value, mutablePairs.value)
+        mutableGame.value = create()
+    }
+
+    fun setMode(mode: ElementMatchMode) {
+        mutableMode.value = mode
+        preferences.edit().putString("mode", mode.name).apply()
+        newGame()
     }
 
     fun setRange(range: ElementRange) {
@@ -107,7 +123,7 @@ class ElementMatchViewModel(application: Application) : AndroidViewModel(applica
         val next = game.flip(index)
         mutableGame.value = next
         if (next.isComplete && !game.isComplete) {
-            val record = ElementMatchRecord(System.currentTimeMillis(), next.seconds, next.tries, next.pairs, next.range, next.misses)
+            val record = ElementMatchRecord(System.currentTimeMillis(), next.seconds, next.tries, next.pairs, next.range, next.misses, next.mode)
             mutableRecords.value = listOf(record) + mutableRecords.value
             ElementMatchRecords.save(getApplication(), mutableRecords.value)
         }
@@ -133,13 +149,14 @@ fun ElementMatchTopBar(onBack: () -> Unit) {
     val records by viewModel.records.collectAsStateWithLifecycle()
     val range by viewModel.range.collectAsStateWithLifecycle()
     val pairs by viewModel.pairs.collectAsStateWithLifecycle()
+    val mode by viewModel.mode.collectAsStateWithLifecycle()
     var recordsOpen by rememberSaveable { mutableStateOf(false) }
     var levelOpen by rememberSaveable { mutableStateOf(false) }
 
     if (recordsOpen) {
         GameRecordsDialog(
             records.map {
-                "${formatDuration(it.seconds)} · 시도 ${it.tries}번 · ${it.range.label} ${it.pairs}쌍" to it.finishedAt
+                "${formatDuration(it.seconds)} · 시도 ${it.tries}번 · ${settingLabel(it.mode, it.range, it.pairs)}" to it.finishedAt
             },
             onDismiss = { recordsOpen = false },
         )
@@ -151,7 +168,17 @@ fun ElementMatchTopBar(onBack: () -> Unit) {
             title = { Text("난이도") },
             text = {
                 Column {
-                    Text("원소 범위", style = MaterialTheme.typography.titleSmall)
+                    Text("맞출 것", style = MaterialTheme.typography.titleSmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ElementMatchMode.entries.forEach { choice ->
+                            FilterChip(
+                                selected = choice == mode,
+                                onClick = { viewModel.setMode(choice) },
+                                label = { Text(choice.label, maxLines = 1) },
+                            )
+                        }
+                    }
+                    Text("원소 범위", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         ElementRange.entries.forEach { choice ->
                             FilterChip(
@@ -188,7 +215,7 @@ fun ElementMatchTopBar(onBack: () -> Unit) {
     }
 
     TopAppBar(
-        title = { Text("원소 짝맞추기") },
+        title = { Text(if (mode == ElementMatchMode.Number) "원소 번호 맞추기" else "원소 짝맞추기") },
         navigationIcon = {
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
@@ -236,7 +263,7 @@ fun ElementMatchScreen() {
             title = { Text(if (best != null && game.seconds < best) "새 기록!" else "모두 맞췄습니다!") },
             text = {
                 Column {
-                    Text("${formatDuration(game.seconds)} · 시도 ${game.tries}번 · ${game.range.label} ${game.pairs}쌍")
+                    Text("${formatDuration(game.seconds)} · 시도 ${game.tries}번 · ${settingLabel(game.mode, game.range, game.pairs)}")
                     Text(
                         finishVersusBest(game.seconds, best),
                         Modifier.padding(top = 8.dp),
@@ -245,12 +272,15 @@ fun ElementMatchScreen() {
                         color = MaterialTheme.colorScheme.primary,
                     )
                     // 평균 — 같은 범위 · 카드 수의 기록 모두(이번 판 포함, 기록 맨 앞에 막 들어갔다)
-                    val same = records.filter { it.range == game.range && it.pairs == game.pairs }
+                    val same = records.filter { sameSetting(it, game) }
                     if (same.isNotEmpty()) {
                         Text(
                             "평균 ${formatDuration(same.sumOf { it.seconds } / same.size)} (${same.size}판)",
                             Modifier.padding(top = 8.dp),
                         )
+                        // 최근 20판의 클리어 시간 — 왼쪽이 오래된 판, 오른쪽 끝이 이번 판.
+                        Text("최근 클리어 시간", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall)
+                        ClearTimeChart(same.take(CHART_GAMES).map { it.seconds }.reversed())
                     }
                     Text("자주 틀린 원소", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall)
                     Text("이번 판: " + missLine(topMisses(listOf(game.misses), 3)), style = MaterialTheme.typography.bodyMedium)
@@ -287,6 +317,7 @@ fun ElementMatchScreen() {
                             if (index < game.cards.size) {
                                 ElementCardView(
                                     card = game.cards[index],
+                                    mode = game.mode,
                                     faceUp = game.isFaceUp(index),
                                     matched = index in game.matched,
                                     width = cardWidth,
@@ -330,7 +361,7 @@ private fun ElementMatchStatus(game: ElementMatchGame, best: Int?, modifier: Mod
             )
         } else {
             Text(
-                "원소기호와 이름이 같은 원소끼리 짝입니다.",
+                if (game.mode == ElementMatchMode.Number) "원소기호와 그 원소의 번호가 짝입니다." else "원소기호와 이름이 같은 원소끼리 짝입니다.",
                 Modifier.padding(top = 4.dp),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -340,7 +371,14 @@ private fun ElementMatchStatus(game: ElementMatchGame, best: Int?, modifier: Mod
 }
 
 @Composable
-private fun ElementCardView(card: ElementCard, faceUp: Boolean, matched: Boolean, width: Dp, onClick: () -> Unit) {
+private fun ElementCardView(
+    card: ElementCard,
+    mode: ElementMatchMode,
+    faceUp: Boolean,
+    matched: Boolean,
+    width: Dp,
+    onClick: () -> Unit,
+) {
     val rotation by animateFloatAsState(if (faceUp) 180f else 0f, tween(250), label = "flip")
     val height = width * CARD_RATIO
     val density = LocalDensity.current.density
@@ -359,7 +397,7 @@ private fun ElementCardView(card: ElementCard, faceUp: Boolean, matched: Boolean
             CardBack(Modifier.fillMaxSize())
         } else {
             // 뒤집힌 채로 그리면 글자가 거울처럼 보이므로 앞면은 한 번 더 뒤집는다.
-            CardFront(card, width, Modifier.fillMaxSize().graphicsLayer { rotationY = 180f })
+            CardFront(card, mode, matched, width, Modifier.fillMaxSize().graphicsLayer { rotationY = 180f })
         }
     }
 }
@@ -385,18 +423,35 @@ private fun CardBack(modifier: Modifier) {
 }
 
 @Composable
-private fun CardFront(card: ElementCard, width: Dp, modifier: Modifier) {
+private fun CardFront(card: ElementCard, mode: ElementMatchMode, matched: Boolean, width: Dp, modifier: Modifier) {
     val element = PeriodicTable.get(card.number)
     val fill = Color(element.category.color)
     Box(modifier.background(fill, CardShape).border(1.dp, CardInk.copy(alpha = 0.25f), CardShape)) {
-        // 원소 번호 — 기호 카드와 이름 카드 모두 왼쪽 위에.
-        Text(
-            element.number.toString(),
-            Modifier.align(Alignment.TopStart).padding(start = 6.dp, top = 4.dp),
-            color = CardInk,
-            style = MaterialTheme.typography.labelMedium,
-        )
-        if (card.isSymbol) {
+        val numberMode = mode == ElementMatchMode.Number
+        // 원소 번호 — 왼쪽 위에. 번호 맞추기에서는 답이 되므로 기호 카드에는 맞춘 뒤에만 쓰고, 번호 카드는 가운데 크게 쓴다.
+        if (!numberMode || (card.isSymbol && matched)) {
+            Text(
+                element.number.toString(),
+                Modifier.align(Alignment.TopStart).padding(start = 6.dp, top = 4.dp),
+                color = CardInk,
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+        if (!card.isSymbol && numberMode) {
+            Text(
+                element.number.toString(),
+                Modifier.align(Alignment.Center),
+                color = CardInk,
+                fontWeight = FontWeight.Bold,
+                fontSize = with(LocalDensity.current) { (width * 0.36f).toSp() },
+            )
+            Text(
+                "번",
+                Modifier.align(Alignment.BottomEnd).padding(end = 6.dp, bottom = 4.dp),
+                color = CardInk.copy(alpha = 0.6f),
+                style = MaterialTheme.typography.labelMedium,
+            )
+        } else if (card.isSymbol) {
             Text(
                 element.symbol,
                 Modifier.align(Alignment.Center),
@@ -429,12 +484,20 @@ private fun CardFront(card: ElementCard, width: Dp, modifier: Modifier) {
  */
 private fun bestSeconds(game: ElementMatchGame, records: List<ElementMatchRecord>): Int? =
     (if (game.isComplete) records.drop(1) else records)
-        .filter { it.range == game.range && it.pairs == game.pairs }
+        .filter { sameSetting(it, game) }
         .minOfOrNull { it.seconds }
+
+/** 같은 모드 · 범위 · 카드 수의 기록인지. */
+private fun sameSetting(record: ElementMatchRecord, game: ElementMatchGame) =
+    record.mode == game.mode && record.range == game.range && record.pairs == game.pairs
+
+/** 「번호 맞추기 1~20번 8쌍」 — 이름 맞추기는 예전 기록과 같게 모드를 쓰지 않는다. */
+private fun settingLabel(mode: ElementMatchMode, range: ElementRange, pairs: Int) =
+    (if (mode == ElementMatchMode.Number) "${mode.label} " else "") + "${range.label} ${pairs}쌍"
 
 /** 가장 빠른 기록과 지금 시간의 차이. 하는 중에는 남은 시간 · 넘긴 시간을, 다 맞추면 빠르고 느린 정도를 보여 준다. */
 private fun compareToBest(game: ElementMatchGame, best: Int?): String {
-    if (best == null) return if (game.isComplete) "이 설정의 첫 기록입니다" else "이 설정(${game.range.label} ${game.pairs}쌍)의 기록이 아직 없습니다"
+    if (best == null) return if (game.isComplete) "이 설정의 첫 기록입니다" else "이 설정(${settingLabel(game.mode, game.range, game.pairs)})의 기록이 아직 없습니다"
     val diff = game.seconds - best
     val head = "최고 기록 ${formatDuration(best)} · "
     return head + when {
@@ -460,3 +523,46 @@ private fun missLine(top: List<Pair<Int, Int>>): String =
         val element = PeriodicTable.get(number)
         "${element.name} ${element.symbol} ${count}번"
     }
+
+/**
+ * 클리어 시간 꺾은선 — seconds 는 오래된 판부터. 마지막 점(이번 판)은 크게, 가장 빠른 판은 초록 점.
+ * 왼쪽에 가장 느린 · 빠른 시간을 적는다.
+ */
+@Composable
+private fun ClearTimeChart(seconds: List<Int>) {
+    val line = MaterialTheme.colorScheme.primary
+    val grid = MaterialTheme.colorScheme.outlineVariant
+    val bestColor = Color(0xFF2E7D32)
+    val top = seconds.max()
+    val bottom = seconds.min()
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        Column(Modifier.height(120.dp), verticalArrangement = Arrangement.SpaceBetween) {
+            Text(formatDuration(top), style = MaterialTheme.typography.labelSmall)
+            Text(formatDuration(bottom), style = MaterialTheme.typography.labelSmall, color = bestColor)
+        }
+        Canvas(Modifier.weight(1f).height(120.dp).padding(start = 6.dp, top = 6.dp, bottom = 6.dp, end = 6.dp)) {
+            val span = (top - bottom).coerceAtLeast(1)
+            fun x(i: Int) = if (seconds.size == 1) size.width / 2 else size.width * i / (seconds.size - 1)
+            fun y(v: Int) = if (top == bottom) size.height / 2 else size.height * (top - v) / span
+            drawLine(grid, Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx())
+            drawLine(grid, Offset(0f, size.height), Offset(size.width, size.height), 1.dp.toPx())
+            for (i in 1 until seconds.size) {
+                drawLine(line, Offset(x(i - 1), y(seconds[i - 1])), Offset(x(i), y(seconds[i])), 2.dp.toPx())
+            }
+            val bestIndex = seconds.indexOf(bottom)
+            seconds.forEachIndexed { i, v ->
+                val last = i == seconds.lastIndex
+                drawCircle(
+                    if (i == bestIndex) bestColor else line,
+                    radius = (if (last) 5.dp else 3.dp).toPx(),
+                    center = Offset(x(i), y(v)),
+                )
+            }
+        }
+    }
+    Text(
+        "최근 ${seconds.size}판 · 오른쪽 끝이 이번 판",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}

@@ -59,4 +59,15 @@ class ElementMatchTest {
         assertEquals(mapOf(1 to 2, 2 to 1, 3 to 1), game.misses)
         assertEquals(listOf(1 to 3, 2 to 1), topMisses(listOf(game.misses, mapOf(1 to 1)), 2))
     }
+
+    @Test
+    fun numberModeKeepsModeAndPairsBySameElement() {
+        val game = ElementMatchGame.create(ElementRange.Easy, 6, Random(2), ElementMatchMode.Number)
+        assertEquals(ElementMatchMode.Number, game.mode)
+        val first = game.cards.indexOfFirst { it.isSymbol }
+        val partner = game.cards.indices.first { it != first && game.cards[it].number == game.cards[first].number }
+        val after = game.flip(first).flip(partner)
+        assertEquals(setOf(first, partner), after.matched)
+        assertEquals(ElementMatchMode.Name, ElementMatchGame.create(ElementRange.Easy, 6, Random(2)).mode)
+    }
 }
