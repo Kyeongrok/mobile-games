@@ -81,6 +81,19 @@ class GemMazeGame(private val random: Random = Random) {
     var path: List<Cell> = shortestPath(emptySet()) ?: error("빈 판에 길이 없다")
         private set
 
+    /** 되돌린 보석(종류, 등급) — 다음에 놓을 때 이것부터 그대로 놓는다. 되돌리기로 새로 뽑을 수는 없다. */
+    private val returned = ArrayDeque<Pair<MazeGemKind, Int>>()
+
+    /** 이번 라운드에 놓기 · 돌 깨기를 한 순서 — 되돌리기는 마지막 것부터. null 이 아닌 Cell 은 깬 돌. */
+    private val history = mutableListOf<Cell?>()
+
+    /** 이번 라운드에 더 깰 수 있는 돌 수. 라운드마다 [BREAKS_PER_ROUND] 로 돌아간다(모아 둘 수 없다). */
+    var breaksLeft = BREAKS_PER_ROUND
+        private set
+
+    /** 다음에 놓일 보석이 정해져 있으면(되돌린 보석) 그 종류 · 등급. */
+    val nextGem: Pair<MazeGemKind, Int>? get() = returned.firstOrNull()
+
     private var toSpawn = 0
     private var spawnTimer = 0f
     private var nextEnemyId = 0
@@ -111,11 +124,47 @@ class GemMazeGame(private val random: Random = Random) {
     /** 무작위 보석을 놓는다. 다 놓았거나 놓을 칸이 더 없으면 고르기로 넘어간다. */
     fun place(cell: Cell): MazeGem? {
         if (!canPlace(cell)) return null
-        val gem = MazeGem(MazeGemKind.entries[random.nextInt(MazeGemKind.entries.size)], rollLevel(), cell.row, cell.col)
+        val (kind, level) = returned.removeFirstOrNull()
+            ?: (MazeGemKind.entries[random.nextInt(MazeGemKind.entries.size)] to rollLevel())
+        val gem = MazeGem(kind, level, cell.row, cell.col)
         placed += gem
+        history += null
         path = shortestPath(blockedCells())!!
         if (placed.size >= PLACEMENTS || !anyPlaceable()) phase = Phase.Choose
         return gem
+    }
+
+    /** 놓기 중에 돌 하나를 깬다. 길이 넓어지기만 하므로 막힐 걱정은 없다. */
+    fun canBreak(cell: Cell) = phase == Phase.Build && breaksLeft > 0 && cell in rocks
+
+    fun breakRock(cell: Cell): Boolean {
+        if (!canBreak(cell)) return false
+        rocks -= cell
+        breaksLeft--
+        history += cell
+        path = shortestPath(blockedCells())!!
+        return true
+    }
+
+    /**
+     * 이번 라운드의 마지막 행동을 되돌린다(놓기 · 고르기 중에만).
+     * 놓은 보석은 거두고 다음에 그대로 다시 놓이게, 깬 돌은 되살리고 깨기 기회를 돌려준다.
+     */
+    fun canUndo() = (phase == Phase.Build || phase == Phase.Choose) && history.isNotEmpty()
+
+    fun undo(): Boolean {
+        if (!canUndo()) return false
+        val broken = history.removeAt(history.lastIndex)
+        if (broken != null) {
+            rocks += broken
+            breaksLeft++
+        } else {
+            val gem = placed.removeAt(placed.lastIndex)
+            returned.addFirst(gem.kind to gem.level)
+        }
+        phase = Phase.Build
+        path = shortestPath(blockedCells())!!
+        return true
     }
 
     /** 놓을 칸이 더 없을 때 놓은 것만으로 고르기로 넘어간다(하나도 없으면 바로 웨이브). */
@@ -154,6 +203,7 @@ class GemMazeGame(private val random: Random = Random) {
 
     private fun startWave() {
         phase = Phase.Wave
+        history.clear()
         toSpawn = if (isBossWave) 1 else WAVE_SIZE
         spawnTimer = 0f
         towers.forEach { it.cooldown = 0f }
@@ -238,6 +288,7 @@ class GemMazeGame(private val random: Random = Random) {
         if (toSpawn == 0 && enemies.isEmpty()) {
             wave++
             phase = Phase.Build
+            breaksLeft = BREAKS_PER_ROUND
             shots.clear()
             return true
         }
@@ -279,6 +330,7 @@ class GemMazeGame(private val random: Random = Random) {
         val START = Cell(0, COLS / 2)
         val EXIT = Cell(ROWS - 1, COLS / 2)
         const val PLACEMENTS = 4
+        const val BREAKS_PER_ROUND = 1
         const val MAX_LEVEL = 5
         const val LIVES = 20
         const val WAVE_SIZE = 10

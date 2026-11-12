@@ -75,7 +75,11 @@ class GemMazeViewModel(application: Application) : AndroidViewModel(application)
         val g = game
         val atCell = (g.placed + g.towers).firstOrNull { it.row == cell.row && it.col == cell.col }
         when (g.phase) {
-            Phase.Build -> if (atCell != null) selected = atCell else if (g.place(cell) != null) selected = null
+            Phase.Build -> when {
+                atCell != null -> selected = atCell
+                cell in g.rocks -> if (g.breakRock(cell)) selected = null
+                g.place(cell) != null -> selected = null
+            }
             Phase.Choose, Phase.Wave -> selected = atCell
             Phase.Over -> Unit
         }
@@ -85,6 +89,13 @@ class GemMazeViewModel(application: Application) : AndroidViewModel(application)
     fun keep(merge: Boolean) {
         val gem = selected ?: return
         if (game.keep(gem, merge)) {
+            selected = null
+            version++
+        }
+    }
+
+    fun undo() {
+        if (game.undo()) {
             selected = null
             version++
         }
@@ -200,9 +211,23 @@ private fun Controls(viewModel: GemMazeViewModel) {
                     "빈 칸을 눌러 보석을 놓으세요 (${game.placed.size}/${GM.PLACEMENTS}). 적은 위에서 아래로 가장 짧은 길로 옵니다.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                if (game.rocks.isNotEmpty()) {
+                    Text(
+                        if (game.breaksLeft > 0) "돌을 누르면 깹니다 (이번 라운드 ${game.breaksLeft}번)" else "이번 라운드에는 돌을 더 깰 수 없습니다",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 info?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                if (!game.anyPlaceable()) {
-                    Button(onClick = viewModel::finishPlacing) { Text("놓을 곳이 없습니다 — 계속") }
+                game.nextGem?.let { (kind, level) ->
+                    Text("다음에 놓일 보석: ${kind.label} ${level}등급 (되돌린 보석)", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (game.canUndo()) OutlinedButton(onClick = viewModel::undo) { Text("되돌리기") }
+                    if (!game.anyPlaceable()) {
+                        Button(onClick = viewModel::finishPlacing) { Text("놓을 곳이 없습니다 — 계속") }
+                    }
                 }
             }
             Phase.Choose -> {
@@ -211,6 +236,7 @@ private fun Controls(viewModel: GemMazeViewModel) {
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = viewModel::undo) { Text("되돌리기") }
                     Button(onClick = { viewModel.keep(false) }, enabled = selected != null && selected in game.placed) { Text("이것 남기기") }
                     if (selected != null && game.canMerge(selected)) {
                         OutlinedButton(onClick = { viewModel.keep(true) }) { Text("합쳐서 ${selected.level + 1}등급으로") }

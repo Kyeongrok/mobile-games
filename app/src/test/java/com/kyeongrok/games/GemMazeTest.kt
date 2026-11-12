@@ -101,4 +101,45 @@ class GemMazeTest {
         println("simple strategy cleared: ${results.sorted()} avg ${results.average()}")
         assertTrue(results.average() in 6.0..45.0)
     }
+
+    @Test
+    fun undoReturnsSameGemForNextPlacement() {
+        val game = GemMazeGame(Random(5))
+        listOf(Cell(2, 0), Cell(2, 1), Cell(2, 2), Cell(2, 3)).forEach { game.place(it) }
+        assertEquals(Phase.Choose, game.phase)
+        val last = game.placed.last()
+        val third = game.placed[2]
+        assertTrue(game.undo())
+        assertTrue(game.undo())
+        assertEquals(Phase.Build, game.phase)
+        assertEquals(2, game.placed.size)
+        assertEquals(third.kind to third.level, game.nextGem)
+        val again = game.place(Cell(6, 6))!!
+        assertEquals(third.kind to third.level, again.kind to again.level)
+        val again2 = game.place(Cell(7, 7))!!
+        assertEquals(last.kind to last.level, again2.kind to again2.level)
+        assertNull(game.nextGem)
+        assertEquals(Phase.Choose, game.phase)
+        game.keep(game.placed[0])
+        assertFalse(game.undo()) // 웨이브 중에는 못 한다
+    }
+
+    @Test
+    fun breakOneRockPerRoundAndUndoRestoresIt() {
+        val game = GemMazeGame(Random(6))
+        listOf(Cell(2, 0), Cell(2, 1), Cell(2, 2), Cell(2, 3)).forEach { game.place(it) }
+        game.keep(game.placed[0])
+        while (game.phase == Phase.Wave) game.step(0.05f)
+        assertEquals(Phase.Build, game.phase)
+        assertFalse(game.breakRock(Cell(5, 5)))        // 돌이 아님
+        assertTrue(game.breakRock(Cell(2, 1)))
+        assertFalse(game.breakRock(Cell(2, 2)))        // 라운드에 하나만
+        assertEquals(setOf(Cell(2, 2), Cell(2, 3)), game.rocks)
+        game.place(Cell(6, 6))
+        assertTrue(game.undo())                         // 놓은 보석부터
+        assertTrue(game.undo())                         // 그다음 깬 돌
+        assertEquals(setOf(Cell(2, 1), Cell(2, 2), Cell(2, 3)), game.rocks)
+        assertEquals(1, game.breaksLeft)
+        assertFalse(game.undo())
+    }
 }
