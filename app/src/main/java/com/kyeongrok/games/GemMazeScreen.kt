@@ -2,11 +2,18 @@ package com.kyeongrok.games
 
 import android.app.Application
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.SoundPool
+import android.os.SystemClock
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,7 +36,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -53,6 +63,26 @@ import kotlin.math.sin
 
 private typealias GM = GemMazeGame
 
+/** 탑이 쏠 때 낼 수 있는 소리(직접 합성한 짧은 소리). [None] 은 소리 없음. */
+enum class MazeSound(val label: String, val res: Int?) {
+    None("없음", null),
+    Zap("퓽", R.raw.maze_zap),
+    Boom("쾅", R.raw.maze_boom),
+    Click("탁", R.raw.maze_click),
+    Chime("띵", R.raw.maze_chime),
+    Blip("뿅", R.raw.maze_blip),
+    Whoosh("슉", R.raw.maze_whoosh),
+    Bubble("뽀글", R.raw.maze_bubble),
+    Buzz("지직", R.raw.maze_buzz),
+}
+
+private val DefaultSounds = mapOf(
+    MazeGemKind.Fire to MazeSound.Boom,
+    MazeGemKind.Ice to MazeSound.Chime,
+    MazeGemKind.Bolt to MazeSound.Buzz,
+    MazeGemKind.Venom to MazeSound.Bubble,
+)
+
 /** 보석 미로 판과 최고 기록(막아 낸 웨이브). */
 class GemMazeViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = application.getSharedPreferences("gem-maze", Context.MODE_PRIVATE)
@@ -70,6 +100,52 @@ class GemMazeViewModel(application: Application) : AndroidViewModel(application)
         private set
     var bestAtStart = best
         private set
+
+    /** 탑 종류마다 고른 발사 소리. */
+    val sounds = mutableStateMapOf<MazeGemKind, MazeSound>().apply {
+        MazeGemKind.entries.forEach { kind ->
+            val name = preferences.getString("sound-${kind.name}", null)
+            put(kind, MazeSound.entries.firstOrNull { it.name == name } ?: DefaultSounds.getValue(kind))
+        }
+    }
+    private val pool = SoundPool.Builder()
+        .setMaxStreams(6)
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_GAME)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build(),
+        )
+        .build()
+    private val soundIds = MazeSound.entries.mapNotNull { s -> s.res?.let { s to pool.load(application, it, 1) } }.toMap()
+    /** 종류마다 마지막으로 소리 낸 때 — 번개처럼 빨리 쏘는 탑이 여럿이어도 너무 시끄럽지 않게. */
+    private val lastPlayed = HashMap<MazeGemKind, Long>()
+
+    fun setSound(kind: MazeGemKind, sound: MazeSound) {
+        sounds[kind] = sound
+        preferences.edit().putString("sound-${kind.name}", sound.name).apply()
+        play(sound)
+    }
+
+    private fun play(sound: MazeSound, volume: Float = 0.6f) {
+        soundIds[sound]?.let { pool.play(it, volume, volume, 1, 0, 1f) }
+    }
+
+    private fun playFired() {
+        if (game.fired.isEmpty()) return
+        val now = SystemClock.elapsedRealtime()
+        game.fired.distinct().forEach { kind ->
+            if (now - (lastPlayed[kind] ?: 0L) >= MIN_SOUND_GAP_MS) {
+                lastPlayed[kind] = now
+                play(sounds.getValue(kind), 0.45f)
+            }
+        }
+        game.fired.clear()
+    }
+
+    override fun onCleared() {
+        pool.release()
+    }
 
     fun tap(cell: Cell) {
         val g = game
@@ -107,7 +183,9 @@ class GemMazeViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun step(dt: Float) {
-        if (game.step(dt)) {
+        val ended = game.step(dt)
+        playFired()
+        if (ended) {
             if (game.cleared > best) {
                 best = game.cleared
                 preferences.edit().putInt("best", best).apply()
@@ -123,6 +201,10 @@ class GemMazeViewModel(application: Application) : AndroidViewModel(application)
         bestAtStart = best
         version++
     }
+
+    companion object {
+        const val MIN_SOUND_GAP_MS = 90L
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -136,7 +218,41 @@ fun GemMazeTopBar(onBack: () -> Unit) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
             }
         },
-        actions = { TextButton(onClick = viewModel::newGame) { Text("새 게임") } },
+        actions = {
+            var showSounds by remember { mutableStateOf(false) }
+            TextButton(onClick = { showSounds = true }) { Text("소리") }
+            TextButton(onClick = viewModel::newGame) { Text("새 게임") }
+            if (showSounds) SoundDialog(viewModel) { showSounds = false }
+        },
+    )
+}
+
+/** 탑 종류마다 발사 소리를 고른다. 고르면 바로 들려준다. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SoundDialog(viewModel: GemMazeViewModel, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("탑 발사 소리") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                MazeGemKind.entries.forEach { kind ->
+                    Column {
+                        Text(kind.label, style = MaterialTheme.typography.titleSmall, color = KindColors.getValue(kind))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            MazeSound.entries.forEach { sound ->
+                                FilterChip(
+                                    selected = viewModel.sounds[kind] == sound,
+                                    onClick = { viewModel.setSound(kind, sound) },
+                                    label = { Text(sound.label) },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
     )
 }
 

@@ -67,6 +67,8 @@ class GemMazeGame(private val random: Random = Random) {
     val placed = mutableListOf<MazeGem>()
     val enemies = mutableListOf<MazeEnemy>()
     val shots = mutableListOf<MazeShot>()
+    /** 지난 [step] 들에서 쏜 탑 종류. 화면이 효과음을 내고 비운다. */
+    val fired = mutableListOf<MazeGemKind>()
 
     var phase = Phase.Build
         private set
@@ -281,6 +283,7 @@ class GemMazeGame(private val random: Random = Random) {
                 .maxByOrNull { it.progress } ?: continue
             tower.cooldown = tower.interval
             hit(tower, target)
+            fired += tower.kind
             shots += MazeShot(tower.kind, tower.col.toFloat(), tower.row.toFloat(), target.x, target.y)
         }
         enemies.removeAll { it.hp <= 0f }
