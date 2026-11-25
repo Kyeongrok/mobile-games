@@ -84,7 +84,7 @@ private val GAME_ENTRIES = listOf(
     GameEntry("프리셀", AppIcons.FreeCell, Screen.FreeCell),
     GameEntry("루미큐브", AppIcons.Rummikub, Screen.Rummikub),
     GameEntry("스플렌더", AppIcons.Splendor, Screen.Splendor),
-    GameEntry("원소 짝맞추기", AppIcons.ElementMatch, Screen.ElementMatch),
+    GameEntry("짝맞추기", AppIcons.ElementMatch, Screen.ElementMatch),
     GameEntry("벽돌깨기", AppIcons.BrickBreaker, Screen.BrickBreaker),
     GameEntry("스택 뒤의 큰 수", AppIcons.NextGreater, Screen.NextGreater),
     GameEntry("다리를 지나는 트럭", AppIcons.Bridge, Screen.Bridge),
@@ -322,7 +322,7 @@ private fun HomeTile(label: String, icon: ImageVector, tint: ComposeColor, onCli
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Icon(icon, contentDescription = null, Modifier.size(40.dp), tint = tint)
-            Text(label, style = MaterialTheme.typography.titleMedium)
+            FitText(label, Modifier.padding(horizontal = 6.dp), style = MaterialTheme.typography.titleMedium)
         }
     }
 }

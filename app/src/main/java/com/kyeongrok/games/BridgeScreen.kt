@@ -97,7 +97,7 @@ class BridgeViewModel : ViewModel() {
 fun BridgeTopBar(onBack: () -> Unit) {
     val viewModel: BridgeViewModel = viewModel()
     TopAppBar(
-        title = { Text("다리를 지나는 트럭") },
+        title = { FitText("다리를 지나는 트럭") },
         navigationIcon = {
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")

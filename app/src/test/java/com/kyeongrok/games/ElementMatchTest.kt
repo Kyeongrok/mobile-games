@@ -70,4 +70,29 @@ class ElementMatchTest {
         assertEquals(setOf(first, partner), after.matched)
         assertEquals(ElementMatchMode.Name, ElementMatchGame.create(ElementRange.Easy, 6, Random(2)).mode)
     }
+
+    @Test
+    fun hexModeDealsValuesFrom0ToFFRegardlessOfRange() {
+        repeat(20) { seed ->
+            val game = ElementMatchGame.create(ElementRange.Easy, 10, Random(seed), ElementMatchMode.Hex)
+            assertEquals(20, game.cards.size)
+            game.cards.groupBy { it.number }.forEach { (value, cards) ->
+                assertTrue(value in 0..255)
+                assertEquals(setOf(true, false), cards.map { it.isSymbol }.toSet())
+            }
+        }
+        // 원소 범위(1~20)를 넘는 값도 나온다
+        val values = (0 until 20).flatMap { ElementMatchGame.create(ElementRange.Easy, 10, Random(it), ElementMatchMode.Hex).cards.map { c -> c.number } }
+        assertTrue(values.any { it > 20 })
+    }
+
+    @Test
+    fun hexTextAndBinaryText() {
+        assertEquals("FF", hexText(255))
+        assertEquals("00", hexText(0))
+        assertEquals("0A", hexText(10))
+        assertEquals("B7", hexText(183))
+        assertEquals("1111 1111", binaryText(255))
+        assertEquals("0000 1010", binaryText(10))
+    }
 }

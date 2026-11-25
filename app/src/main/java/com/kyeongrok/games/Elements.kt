@@ -86,13 +86,31 @@ enum class ElementRange(val label: String, val last: Int) {
     All("전체 118", 118),
 }
 
-/** 기호 카드의 짝 — 이름 카드(이름 맞추기)인지 번호 카드(번호 맞추기)인지. */
+/**
+ * 무엇끼리 짝을 짓는지. 이름 · 번호 맞추기는 원소기호 카드의 짝이 이름 카드 · 번호 카드이고,
+ * 16진수 맞추기는 0~FF 의 16진수 카드와 같은 값의 10진수 카드가 짝이다(원소 범위를 쓰지 않는다).
+ */
 enum class ElementMatchMode(val label: String) {
     Name("이름 맞추기"),
     Number("번호 맞추기"),
+    Hex("16진수 맞추기");
+
+    val isHex: Boolean get() = this == Hex
 }
 
-/** 한 장의 카드. 짝이 되는 두 장은 같은 원소의 기호 카드와 짝 카드(모드에 따라 이름 · 번호)다. */
+/** 16진수 맞추기에서 뽑는 값 — 0(0x00)부터 255(0xFF)까지. */
+val HEX_VALUES = 0..0xFF
+
+/** 255 → "FF", 10 → "0A" — 늘 두 자리 대문자. */
+fun hexText(value: Int): String = value.toString(16).uppercase().padStart(2, '0')
+
+/** 255 → "1111 1111" — 네 자리씩 띄운 8자리 2진수. */
+fun binaryText(value: Int): String = value.toString(2).padStart(8, '0').chunked(4).joinToString(" ")
+
+/**
+ * 한 장의 카드. 짝이 되는 두 장은 number 가 같은 카드 — 원소 모드에서는 같은 원소의 기호 카드와 짝 카드(이름 · 번호),
+ * 16진수 모드에서는 같은 값의 16진수 카드(isSymbol)와 10진수 카드다.
+ */
 data class ElementCard(val number: Int, val isSymbol: Boolean)
 
 data class ElementMatchGame(
@@ -139,7 +157,8 @@ data class ElementMatchGame(
             random: Random = Random,
             mode: ElementMatchMode = ElementMatchMode.Name,
         ): ElementMatchGame {
-            val numbers = (1..range.last).shuffled(random).take(pairs)
+            val pool = if (mode.isHex) HEX_VALUES else 1..range.last
+            val numbers = pool.shuffled(random).take(pairs)
             val cards = numbers.flatMap { listOf(ElementCard(it, true), ElementCard(it, false)) }.shuffled(random)
             return ElementMatchGame(cards, range = range, mode = mode)
         }

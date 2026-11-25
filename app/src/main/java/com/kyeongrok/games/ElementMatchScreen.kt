@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -169,7 +170,7 @@ fun ElementMatchTopBar(onBack: () -> Unit) {
             text = {
                 Column {
                     Text("맞출 것", style = MaterialTheme.typography.titleSmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         ElementMatchMode.entries.forEach { choice ->
                             FilterChip(
                                 selected = choice == mode,
@@ -178,14 +179,19 @@ fun ElementMatchTopBar(onBack: () -> Unit) {
                             )
                         }
                     }
-                    Text("원소 범위", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ElementRange.entries.forEach { choice ->
-                            FilterChip(
-                                selected = choice == range,
-                                onClick = { viewModel.setRange(choice) },
-                                label = { Text(choice.label, maxLines = 1) },
-                            )
+                    if (mode.isHex) {
+                        Text("범위", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall)
+                        Text("0~FF (10진수 0~255)", style = MaterialTheme.typography.bodyMedium)
+                    } else {
+                        Text("원소 범위", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ElementRange.entries.forEach { choice ->
+                                FilterChip(
+                                    selected = choice == range,
+                                    onClick = { viewModel.setRange(choice) },
+                                    label = { Text(choice.label, maxLines = 1) },
+                                )
+                            }
                         }
                     }
                     Text(
@@ -215,7 +221,15 @@ fun ElementMatchTopBar(onBack: () -> Unit) {
     }
 
     TopAppBar(
-        title = { Text(if (mode == ElementMatchMode.Number) "원소 번호 맞추기" else "원소 짝맞추기") },
+        title = {
+            FitText(
+                when (mode) {
+                    ElementMatchMode.Name -> "원소 이름 맞추기"
+                    ElementMatchMode.Number -> "원소 번호 맞추기"
+                    ElementMatchMode.Hex -> "16진수 맞추기"
+                },
+            )
+        },
         navigationIcon = {
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
@@ -282,9 +296,11 @@ fun ElementMatchScreen() {
                         Text("최근 클리어 시간", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall)
                         ClearTimeChart(same.take(CHART_GAMES).map { it.seconds }.reversed())
                     }
-                    Text("자주 틀린 원소", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall)
-                    Text("이번 판: " + missLine(topMisses(listOf(game.misses), 3)), style = MaterialTheme.typography.bodyMedium)
-                    Text("지금까지: " + missLine(topMisses(records.map { it.misses }, 5)), style = MaterialTheme.typography.bodyMedium)
+                    // 원소 번호와 16진수 값은 섞으면 뜻이 없으므로 「지금까지」는 같은 종류(원소 · 16진수)의 기록만 모은다.
+                    val sameKind = records.filter { it.mode.isHex == game.mode.isHex }
+                    Text(if (game.mode.isHex) "자주 틀린 값" else "자주 틀린 원소", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall)
+                    Text("이번 판: " + missLine(game.mode, topMisses(listOf(game.misses), 3)), style = MaterialTheme.typography.bodyMedium)
+                    Text("지금까지: " + missLine(game.mode, topMisses(sameKind.map { it.misses }, 5)), style = MaterialTheme.typography.bodyMedium)
                 }
             },
             confirmButton = { TextButton(onClick = next) { Text("새 게임") } },
@@ -351,7 +367,14 @@ private fun ElementMatchStatus(game: ElementMatchGame, best: Int?, modifier: Mod
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (lastNumber != null) {
+        if (lastNumber != null && game.mode.isHex) {
+            Text(
+                "0x${hexText(lastNumber)} = $lastNumber · 2진수 ${binaryText(lastNumber)}",
+                Modifier.padding(top = 4.dp),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+        } else if (lastNumber != null) {
             val element = PeriodicTable.get(lastNumber)
             Text(
                 "${element.number}번 ${element.symbol} · ${element.name} (${element.english}) · ${element.category.label}",
@@ -361,7 +384,11 @@ private fun ElementMatchStatus(game: ElementMatchGame, best: Int?, modifier: Mod
             )
         } else {
             Text(
-                if (game.mode == ElementMatchMode.Number) "원소기호와 그 원소의 번호가 짝입니다." else "원소기호와 이름이 같은 원소끼리 짝입니다.",
+                when (game.mode) {
+                    ElementMatchMode.Number -> "원소기호와 그 원소의 번호가 짝입니다."
+                    ElementMatchMode.Hex -> "16진수와 같은 값의 10진수가 짝입니다. (예: FF = 255)"
+                    ElementMatchMode.Name -> "원소기호와 이름이 같은 원소끼리 짝입니다."
+                },
                 Modifier.padding(top = 4.dp),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -424,6 +451,10 @@ private fun CardBack(modifier: Modifier) {
 
 @Composable
 private fun CardFront(card: ElementCard, mode: ElementMatchMode, matched: Boolean, width: Dp, modifier: Modifier) {
+    if (mode.isHex) {
+        HexCardFront(card, matched, width, modifier)
+        return
+    }
     val element = PeriodicTable.get(card.number)
     val fill = Color(element.category.color)
     Box(modifier.background(fill, CardShape).border(1.dp, CardInk.copy(alpha = 0.25f), CardShape)) {
@@ -479,6 +510,40 @@ private fun CardFront(card: ElementCard, mode: ElementMatchMode, matched: Boolea
 }
 
 /**
+ * 16진수 맞추기의 앞면 — 16진수 카드는 「FF」를, 10진수 카드는 「255」를 가운데 크게.
+ * 색은 앞자리(상위 4비트)마다 달라 0x3_ 끼리 비슷한 색이 된다. 맞춘 16진수 카드에는 10진수 값도 작게 쓴다.
+ */
+@Composable
+private fun HexCardFront(card: ElementCard, matched: Boolean, width: Dp, modifier: Modifier) {
+    val value = card.number
+    val fill = Color.hsl(hue = (value shr 4) * 22.5f, saturation = 0.65f, lightness = 0.85f)
+    Box(modifier.background(fill, CardShape).border(1.dp, CardInk.copy(alpha = 0.25f), CardShape)) {
+        Text(
+            if (card.isSymbol) hexText(value) else value.toString(),
+            Modifier.align(Alignment.Center),
+            color = CardInk,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            fontSize = with(LocalDensity.current) { (width * 0.34f).toSp() },
+        )
+        Text(
+            if (card.isSymbol) "16진수" else "10진수",
+            Modifier.align(Alignment.BottomEnd).padding(end = 6.dp, bottom = 4.dp),
+            color = CardInk.copy(alpha = 0.6f),
+            style = MaterialTheme.typography.labelSmall,
+        )
+        if (card.isSymbol && matched) {
+            Text(
+                value.toString(),
+                Modifier.align(Alignment.TopStart).padding(start = 6.dp, top = 4.dp),
+                color = CardInk,
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+    }
+}
+
+/**
  * 같은 범위 · 같은 카드 수에서 가장 빠른 기록(초). 없으면 null.
  * 다 맞춘 판은 기록 맨 앞에 막 들어갔으므로 그것을 빼고 견준다.
  */
@@ -489,11 +554,14 @@ private fun bestSeconds(game: ElementMatchGame, records: List<ElementMatchRecord
 
 /** 같은 모드 · 범위 · 카드 수의 기록인지. */
 private fun sameSetting(record: ElementMatchRecord, game: ElementMatchGame) =
-    record.mode == game.mode && record.range == game.range && record.pairs == game.pairs
+    record.mode == game.mode && record.pairs == game.pairs && (game.mode.isHex || record.range == game.range)
 
-/** 「번호 맞추기 1~20번 8쌍」 — 이름 맞추기는 예전 기록과 같게 모드를 쓰지 않는다. */
-private fun settingLabel(mode: ElementMatchMode, range: ElementRange, pairs: Int) =
-    (if (mode == ElementMatchMode.Number) "${mode.label} " else "") + "${range.label} ${pairs}쌍"
+/** 「번호 맞추기 1~20번 8쌍」 · 「16진수 맞추기 8쌍」 — 이름 맞추기는 예전 기록과 같게 모드를 쓰지 않는다. 16진수는 범위가 하나뿐. */
+private fun settingLabel(mode: ElementMatchMode, range: ElementRange, pairs: Int) = when (mode) {
+    ElementMatchMode.Hex -> "${mode.label} ${pairs}쌍"
+    ElementMatchMode.Number -> "${mode.label} ${range.label} ${pairs}쌍"
+    ElementMatchMode.Name -> "${range.label} ${pairs}쌍"
+}
 
 /** 가장 빠른 기록과 지금 시간의 차이. 하는 중에는 남은 시간 · 넘긴 시간을, 다 맞추면 빠르고 느린 정도를 보여 준다. */
 private fun compareToBest(game: ElementMatchGame, best: Int?): String {
@@ -517,11 +585,15 @@ private fun finishVersusBest(seconds: Int, best: Int?): String = when {
     else -> "최고 기록(${formatDuration(best)})보다 ${formatDuration(seconds - best)} 늦었습니다"
 }
 
-/** 「질소 N 3번 · 붕소 B 2번」 — 없으면 「없음」. */
-private fun missLine(top: List<Pair<Int, Int>>): String =
+/** 「질소 N 3번 · 붕소 B 2번」, 16진수는 「B7=183 2번」 — 없으면 「없음」. */
+private fun missLine(mode: ElementMatchMode, top: List<Pair<Int, Int>>): String =
     if (top.isEmpty()) "없음" else top.joinToString(" · ") { (number, count) ->
-        val element = PeriodicTable.get(number)
-        "${element.name} ${element.symbol} ${count}번"
+        if (mode.isHex) {
+            "${hexText(number)}=$number ${count}번"
+        } else {
+            val element = PeriodicTable.get(number)
+            "${element.name} ${element.symbol} ${count}번"
+        }
     }
 
 /**
