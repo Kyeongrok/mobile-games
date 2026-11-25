@@ -138,6 +138,8 @@ data class ElementMatchGame(
         if (isComplete || isMismatchShowing || isFaceUp(index)) return this
         if (open.isEmpty()) return copy(open = listOf(index))
         val first = open.first()
+        // 16진수는 다 펼쳐 두므로 같은 종류(16진수끼리 · 10진수끼리)를 또 누르면 고른 것을 바꾼 것으로 본다.
+        if (mode.isHex && cards[first].isSymbol == cards[index].isSymbol) return copy(open = listOf(index))
         return if (cards[first].number == cards[index].number) {
             copy(matched = matched + first + index, open = emptyList(), tries = tries + 1, lastMatch = cards[index].number)
         } else {

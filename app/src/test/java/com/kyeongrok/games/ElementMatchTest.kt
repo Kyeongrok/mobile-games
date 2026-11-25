@@ -87,6 +87,20 @@ class ElementMatchTest {
     }
 
     @Test
+    fun hexModeTappingSameKindSwitchesSelectionWithoutMiss() {
+        val cards = listOf(ElementCard(255, true), ElementCard(16, true), ElementCard(255, false), ElementCard(16, false))
+        var game = ElementMatchGame(cards, range = ElementRange.Easy, mode = ElementMatchMode.Hex)
+        game = game.flip(0).flip(1)                  // FF 고르고 10 을 누르면 10 으로 바뀐다
+        assertEquals(listOf(1), game.open)
+        assertEquals(0, game.tries)
+        game = game.flip(2)                          // 0x10 과 255 — 틀림
+        assertTrue(game.isMismatchShowing)
+        assertEquals(mapOf(16 to 1, 255 to 1), game.misses)
+        game = game.hideMismatch().flip(0).flip(2)   // FF 와 255 — 맞음
+        assertEquals(setOf(0, 2), game.matched)
+    }
+
+    @Test
     fun hexTextAndBinaryText() {
         assertEquals("FF", hexText(255))
         assertEquals("00", hexText(0))

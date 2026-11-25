@@ -307,10 +307,10 @@ fun ElementMatchScreen() {
         )
     }
 
-    // 짝이 아닌 두 장은 잠깐 보여 주고 다시 덮는다.
+    // 짝이 아닌 두 장은 잠깐 보여 주고 다시 덮는다. 16진수는 늘 펼쳐 두므로 틀렸다는 표시만 짧게.
     LaunchedEffect(game.open) {
         if (game.isMismatchShowing) {
-            delay(900)
+            delay(if (game.mode.isHex) 450 else 900)
             viewModel.hideMismatch()
         }
     }
@@ -330,7 +330,16 @@ fun ElementMatchScreen() {
                     Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
                         for (column in 0 until COLUMNS) {
                             val index = row * COLUMNS + column
-                            if (index < game.cards.size) {
+                            if (index < game.cards.size && game.mode.isHex) {
+                                HexCardView(
+                                    card = game.cards[index],
+                                    matched = index in game.matched,
+                                    selected = index in game.open,
+                                    wrong = game.isMismatchShowing && index in game.open,
+                                    width = cardWidth,
+                                    onClick = { viewModel.flip(index) },
+                                )
+                            } else if (index < game.cards.size) {
                                 ElementCardView(
                                     card = game.cards[index],
                                     mode = game.mode,
@@ -386,7 +395,7 @@ private fun ElementMatchStatus(game: ElementMatchGame, best: Int?, modifier: Mod
             Text(
                 when (game.mode) {
                     ElementMatchMode.Number -> "원소기호와 그 원소의 번호가 짝입니다."
-                    ElementMatchMode.Hex -> "16진수와 같은 값의 10진수가 짝입니다. (예: FF = 255)"
+                    ElementMatchMode.Hex -> "16진수 카드와 같은 값의 10진수 카드를 차례로 누르세요. (예: FF = 255)"
                     ElementMatchMode.Name -> "원소기호와 이름이 같은 원소끼리 짝입니다."
                 },
                 Modifier.padding(top = 4.dp),
@@ -509,14 +518,47 @@ private fun CardFront(card: ElementCard, mode: ElementMatchMode, matched: Boolea
     }
 }
 
+private val HexCardFill = Color(0xFFB8DAF5)
+private val DecimalCardFill = Color(0xFFFFE9A8)
+private val WrongColor = Color(0xFFD32F2F)
+
+/**
+ * 16진수 맞추기의 카드 — 뒤집지 않고 처음부터 모두 펼쳐 둔다(자리 외우기가 아니라 바꿔 읽기 연습).
+ * 하나를 누르면 굵은 테두리로 고른 것을 보여 주고, 짝이 아니면 두 장이 잠깐 빨간 테두리가 된다. 맞춘 카드는 흐리게.
+ */
+@Composable
+private fun HexCardView(
+    card: ElementCard,
+    matched: Boolean,
+    selected: Boolean,
+    wrong: Boolean,
+    width: Dp,
+    onClick: () -> Unit,
+) {
+    val outline = when {
+        wrong -> WrongColor
+        selected -> MaterialTheme.colorScheme.primary
+        else -> Color.Transparent
+    }
+    Box(
+        Modifier
+            .size(width, width * CARD_RATIO)
+            .alpha(if (matched) 0.3f else 1f)
+            .clickable(enabled = !matched && !selected, onClick = onClick),
+    ) {
+        HexCardFront(card, matched, width, Modifier.fillMaxSize())
+        Box(Modifier.fillMaxSize().border(3.dp, outline, CardShape))
+    }
+}
+
 /**
  * 16진수 맞추기의 앞면 — 16진수 카드는 「FF」를, 10진수 카드는 「255」를 가운데 크게.
- * 색은 앞자리(상위 4비트)마다 달라 0x3_ 끼리 비슷한 색이 된다. 맞춘 16진수 카드에는 10진수 값도 작게 쓴다.
+ * 색은 카드 종류(16진수 · 10진수)로만 나눈다 — 값마다 색을 달리하면 짝이 색으로 드러난다. 맞춘 16진수 카드에는 10진수 값도 작게 쓴다.
  */
 @Composable
 private fun HexCardFront(card: ElementCard, matched: Boolean, width: Dp, modifier: Modifier) {
     val value = card.number
-    val fill = Color.hsl(hue = (value shr 4) * 22.5f, saturation = 0.65f, lightness = 0.85f)
+    val fill = if (card.isSymbol) HexCardFill else DecimalCardFill
     Box(modifier.background(fill, CardShape).border(1.dp, CardInk.copy(alpha = 0.25f), CardShape)) {
         Text(
             if (card.isSymbol) hexText(value) else value.toString(),
