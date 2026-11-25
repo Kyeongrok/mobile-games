@@ -152,7 +152,7 @@ fun ElementMatchTopBar(onBack: () -> Unit) {
     val pairs by viewModel.pairs.collectAsStateWithLifecycle()
     val mode by viewModel.mode.collectAsStateWithLifecycle()
     var recordsOpen by rememberSaveable { mutableStateOf(false) }
-    var levelOpen by rememberSaveable { mutableStateOf(false) }
+    var choiceOpen by rememberSaveable { mutableStateOf(false) }
 
     if (recordsOpen) {
         GameRecordsDialog(
@@ -163,13 +163,13 @@ fun ElementMatchTopBar(onBack: () -> Unit) {
         )
     }
 
-    if (levelOpen) {
+    if (choiceOpen) {
         AlertDialog(
-            onDismissRequest = { levelOpen = false },
-            title = { Text("난이도") },
+            onDismissRequest = { choiceOpen = false },
+            title = { Text("게임 선택") },
             text = {
                 Column {
-                    Text("맞출 것", style = MaterialTheme.typography.titleSmall)
+                    Text("게임", style = MaterialTheme.typography.titleSmall)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         ElementMatchMode.entries.forEach { choice ->
                             FilterChip(
@@ -216,7 +216,7 @@ fun ElementMatchTopBar(onBack: () -> Unit) {
                     )
                 }
             },
-            confirmButton = { TextButton(onClick = { levelOpen = false }) { Text("닫기") } },
+            confirmButton = { TextButton(onClick = { choiceOpen = false }) { Text("닫기") } },
         )
     }
 
@@ -236,7 +236,7 @@ fun ElementMatchTopBar(onBack: () -> Unit) {
             }
         },
         actions = {
-            TextButton(onClick = { levelOpen = true }) { Text("난이도") }
+            TextButton(onClick = { choiceOpen = true }) { Text("게임 선택") }
             TextButton(onClick = { recordsOpen = true }) { Text("기록") }
             TextButton(onClick = viewModel::newGame) { Text("새 게임") }
         },
